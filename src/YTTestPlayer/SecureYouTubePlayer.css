@@ -1,0 +1,200 @@
+.syp {
+  --syp-accent: #ff3d3d;
+  --syp-fg: #fff;
+  --syp-dim: rgba(255, 255, 255, .55);
+  --syp-glass: rgba(20, 20, 24, .92);
+
+  position: relative;
+  width: 100%;
+  max-width: 960px;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+  color: var(--syp-fg);
+  font: 14px system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.syp:focus-visible { box-shadow: 0 0 0 3px rgba(79, 140, 255, .6); }
+.syp:fullscreen { border-radius: 0; max-width: none; }
+.syp.is-idle { cursor: none; }
+
+.syp--empty { display: flex; align-items: center; justify-content: center; color: #aaa; }
+
+/* ---- YouTube iframe (crop + scale) ---- */
+.syp__yt {
+  position: absolute;
+  left: 0; right: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.syp__scale { width: 100%; height: 100%; }
+.syp__scale iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+/* ---- Pause cover ---- */
+.syp__cover {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .85);
+  pointer-events: none;
+  transition: opacity .2s;
+}
+.syp.is-playing .syp__cover { opacity: 0; }
+.syp__big {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: rgba(255, 255, 255, .14);
+  display: flex; align-items: center; justify-content: center;
+}
+.syp__big svg { width: 40px; height: 40px; fill: currentColor; }
+.syp__loading { color: var(--syp-dim); }
+.syp__err { font-size: 15px; max-width: 80%; text-align: center; color: #ff8a80; line-height: 1.5; }
+
+.syp__shield { position: absolute; inset: 0; z-index: 3; cursor: pointer; }
+
+/* ---- Double-tap flash ---- */
+.syp__flash {
+  position: absolute; top: 0; bottom: 0; z-index: 4;
+  width: 38%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: rgba(255, 255, 255, .1);
+  pointer-events: none;
+  font-weight: 600;
+  animation: syp-flash .7s ease-out forwards;
+}
+.syp__flash svg { width: 34px; height: 34px; fill: currentColor; }
+.syp__flash--left  { left: 0;  border-radius: 0 50% 50% 0 / 0 100% 100% 0; }
+.syp__flash--right { right: 0; border-radius: 50% 0 0 50% / 100% 0 0 100%; }
+@keyframes syp-flash { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ---- Control bar ---- */
+.syp__bar {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
+  padding: 24px 10px 6px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, .85));
+  transition: opacity .25s;
+}
+.syp.is-idle .syp__bar { opacity: 0; pointer-events: none; }
+
+.syp__progress {
+  position: relative;
+  height: 18px;
+  display: flex; align-items: center;
+  cursor: pointer;
+  touch-action: none;
+  margin: 0 4px;
+}
+.syp__track {
+  position: relative; width: 100%; height: 4px;
+  background: rgba(255, 255, 255, .25);
+  border-radius: 2px;
+  transition: height .12s;
+}
+.syp__progress:hover .syp__track { height: 6px; }
+.syp__buf, .syp__fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; }
+.syp__buf  { background: rgba(255, 255, 255, .4); }
+.syp__fill { background: var(--syp-accent); }
+.syp__knob {
+  position: absolute; top: 50%;
+  width: 13px; height: 13px; border-radius: 50%;
+  background: var(--syp-accent);
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform .12s;
+}
+.syp__progress:hover .syp__knob,
+.syp__progress:active .syp__knob { transform: translate(-50%, -50%) scale(1); }
+.syp__tip {
+  position: absolute; bottom: 22px;
+  transform: translateX(-50%);
+  background: var(--syp-glass);
+  padding: 3px 7px; border-radius: 4px;
+  font-size: 12px; font-variant-numeric: tabular-nums;
+  pointer-events: none; white-space: nowrap;
+}
+
+.syp__row { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.syp__row button {
+  position: relative;
+  width: 38px; height: 38px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; border-radius: 8px;
+  color: var(--syp-fg); cursor: pointer; padding: 0;
+}
+.syp__row button:hover:not(:disabled), .syp__row button.on { background: rgba(255, 255, 255, .14); }
+.syp__row button:focus-visible { outline: 2px solid #4f8cff; outline-offset: -2px; }
+.syp__row button:disabled { opacity: .35; cursor: default; }
+.syp__row svg { width: 24px; height: 24px; fill: currentColor; }
+.syp__row .syp__play svg { width: 28px; height: 28px; }
+
+.syp__time {
+  margin-left: 6px;
+  font-size: 13px; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.syp__time em { font-style: normal; color: var(--syp-dim); }
+.syp__spacer { flex: 1; }
+
+.syp__badge {
+  position: absolute; top: 3px; right: 1px;
+  background: var(--syp-accent); color: #fff;
+  font: 700 8px/1 system-ui, sans-serif; font-style: normal;
+  padding: 2px 3px; border-radius: 3px;
+}
+
+/* ---- Settings menu ---- */
+.syp__menu {
+  position: absolute; right: 10px; bottom: 70px; z-index: 6;
+  width: min(260px, calc(100% - 20px));
+  max-height: calc(100% - 84px); overflow-y: auto;
+  background: var(--syp-glass);
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .5);
+}
+.syp__menu-h {
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--syp-dim); margin: 4px 4px 6px;
+}
+.syp__chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.syp__chips button, .syp__list button {
+  background: rgba(255, 255, 255, .08); color: var(--syp-fg);
+  border: 0; border-radius: 6px; cursor: pointer;
+  font: inherit; font-size: 13px;
+}
+.syp__chips button { padding: 5px 9px; }
+.syp__list { display: flex; flex-direction: column; gap: 3px; }
+.syp__list button { text-align: left; padding: 7px 10px; }
+.syp__chips button:hover, .syp__list button:hover { background: rgba(255, 255, 255, .16); }
+.syp__chips button.on, .syp__list button.on { background: var(--syp-accent); }
+.syp__note { margin: 8px 4px 2px; font-size: 11px; line-height: 1.4; color: var(--syp-dim); }
+
+/* ---- Phone ---- */
+@media (max-width: 560px) {
+  .syp { border-radius: 8px; }
+  .syp__bar { padding: 18px 4px 2px; }
+  .syp__row button { width: 34px; height: 34px; }
+  .syp__row svg { width: 21px; height: 21px; }
+  .syp__time { font-size: 11px; margin-left: 2px; }
+  .syp__menu { bottom: 58px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .syp__flash { animation-duration: .01s; }
+  .syp__cover, .syp__bar, .syp__track, .syp__knob { transition: none; }
+}
+
+/* ---- Embed page (mobile app WebView) ---- */
+.syp-embed-body { margin: 0; background: #000; overflow: hidden; }
+.syp-embed {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #000;
+}
+.syp-embed .syp {
+  width: min(100vw, calc(100vh * 16 / 9));
+  max-width: none;
+  border-radius: 0;
+}

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IMA Campus - YouTube Player Lab</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0b0f19;
+      color: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .header h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .header p {
+      color: #9ca3af;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    .card {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 800px;
+      padding: 20px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      margin-bottom: 20px;
+    }
+    .input-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    input[type="text"] {
+      flex: 1;
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 10px;
+      padding: 12px 16px;
+      color: #fff;
+      font-size: 15px;
+      outline: none;
+      transition: border 0.2s;
+    }
+    input[type="text"]:focus {
+      border-color: #ef4444;
+    }
+    .btn {
+      background: #ef4444;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .chip {
+      background: #1f2937;
+      color: #d1d5db;
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      border: 1px solid #374151;
+      transition: all 0.2s;
+    }
+    .chip:hover {
+      background: #374151;
+      color: #fff;
+      border-color: #ef4444;
+    }
+    .player-container {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #374151;
+    }
+    .player-container iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .feat-card {
+      background: #1f2937;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border-left: 3px solid #ef4444;
+    }
+    .feat-card h4 {
+      font-size: 13px;
+      color: #f3f4f6;
+      margin-bottom: 2px;
+    }
+    .feat-card p {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    .log-box {
+      margin-top: 16px;
+      background: #030712;
+      border: 1px solid #1f2937;
+      border-radius: 10px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #10b981;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🎬 IMA Campus YouTube Player Lab</h1>
+    <p>Test secure in-app playback with YouTube URLs or Video IDs</p>
+  </div>
+
+  <div class="card">
+    <div class="input-row">
+      <input type="text" id="videoInput" placeholder="Paste YouTube link (e.g. https://www.youtube.com/watch?v=M7lc1UVf-VE)" value="https://www.youtube.com/watch?v=M7lc1UVf-VE" />
+      <button class="btn" onclick="loadVideo()">Play Video</button>
+    </div>
+
+    <div class="chips">
+      <span class="chip" onclick="setPreset('M7lc1UVf-VE')">Sample Lesson</span>
+      <span class="chip" onclick="setPreset('dQw4w9WgXcQ')">Music Video</span>
+      <span class="chip" onclick="setPreset('jfKfPfyJRdk')">Lofi Chill</span>
+      <span class="chip" onclick="setPreset('https://youtu.be/kJQP7kiw5Fk')">Luis Fonsi (Short Link)</span>
+    </div>
+
+    <div class="player-container" id="playerWrap">
+      <div id="ytPlayer"></div>
+    </div>
+
+    <div class="features-grid">
+      <div class="feat-card">
+        <h4>🛡️ Touch Shield Protection</h4>
+        <p>Prevents redirecting to external YouTube app or clicking off-site links.</p>
+      </div>
+      <div class="feat-card">
+        <h4>⏩ Custom Controls & Speed</h4>
+        <p>Custom seekbar, scrub buffer, and speed options (0.5x - 2.0x).</p>
+      </div>
+      <div class="feat-card">
+        <h4>📱 Native & In-App Support</h4>
+        <p>Transpiled for mobile WebView integration inside Course Player.</p>
+      </div>
+    </div>
+
+    <div class="log-box" id="logBox">
+      [System] Ready. Enter a YouTube URL or tap a preset to test playback.
+    </div>
+  </div>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    let player = null;
+    const logBox = document.getElementById('logBox');
+
+    function log(msg) {
+      const line = document.createElement('div');
+      const time = new Date().toLocaleTimeString();
+      line.textContent = `[${time}] ${msg}`;
+      logBox.appendChild(line);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function extractVideoId(input) {
+      if (!input) return null;
+      input = input.trim();
+      if (/^[\w-]{11}$/.test(input)) return input;
+      try {
+        const u = new URL(input.startsWith('http') ? input : 'https://' + input);
+        const host = u.hostname.replace(/^www\.|^m\./, '');
+        if (host === 'youtu.be') return u.pathname.slice(1, 12);
+        if (host.includes('youtube.com')) {
+          const v = u.searchParams.get('v');
+          if (v) return v.slice(0, 11);
+          const m = u.pathname.match(/\/(embed|shorts|v)\/([\w-]{11})/);
+          if (m) return m[2];
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function onYouTubeIframeAPIReady() {
+      log("YouTube IFrame API Loaded successfully.");
+      initPlayer('M7lc1UVf-VE');
+    }
+
+    function initPlayer(videoId) {
+      if (player) {
+        player.loadVideoById(videoId);
+        log(`Loading video ID: ${videoId}`);
+        return;
+      }
+      player = new YT.Player('ytPlayer', {
+        videoId: videoId,
+        playerVars: {
+          autoplay: 1,
+          controls: 1,
+          rel: 0,
+          modestbranding: 1,
+          playsinline: 1
+        },
+        events: {
+          'onReady': onPlayerReady,
+          'onStateChange': onPlayerStateChange
+        }
+      });
+    }
+
+    function onPlayerReady(event) {
+      log("Player is Ready. Playing video...");
+      event.target.playVideo();
+    }
+
+    function onPlayerStateChange(event) {
+      const states = {
+        [-1]: 'UNSTARTED',
+        [0]: 'ENDED',
+        [1]: 'PLAYING',
+        [2]: 'PAUSED',
+        [3]: 'BUFFERING',
+        [5]: 'CUED'
+      };
+      log(`Player State Changed: ${states[event.data] || event.data}`);
+    }
+
+    function loadVideo() {
+      const input = document.getElementById('videoInput').value;
+      const vid = extractVideoId(input);
+      if (!vid) {
+        alert('Please enter a valid YouTube URL or Video ID');
+        return;
+      }
+      initPlayer(vid);
+    }
+
+    function setPreset(url) {
+      document.getElementById('videoInput').value = url;
+      loadVideo();
+    }
+  </script>
+</body>
+</html>

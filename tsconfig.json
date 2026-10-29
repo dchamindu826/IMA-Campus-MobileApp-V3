@@ -1,5 +1,4 @@
 {
-  "extends": "@react-native/typescript-config",
-  "include": ["**/*.ts", "**/*.tsx", "src/screens/StreamsScreen.jsx", "src/screens/ProfileScreen.jsx", "App.jsx", "src/screens/PaymentScreen.jsx", "src/context/ThemeContext.jsx", "src/screens/HomeScreen.jsx"],
-  "exclude": ["**/node_modules", "**/Pods"]
+  "compilerOptions": {},
+  "extends": "expo/tsconfig.base"
 }
