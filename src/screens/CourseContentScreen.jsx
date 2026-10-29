@@ -609,7 +609,7 @@ const CourseContentScreen = ({ route, navigation }) => {
 
     // 🔥 OFFLINE PLAYBACK LOGIC ADDED HERE 🔥
     const handlePlayVideo = async (item) => {
-        const videoLink = item.link || item.url || item.file;
+        const videoLink = item.youtubeLink || item.link || item.url || item.file;
         if (!videoLink) return Alert.alert("Error", "Video link is unavailable.");
 
         saveToRecent(item);
