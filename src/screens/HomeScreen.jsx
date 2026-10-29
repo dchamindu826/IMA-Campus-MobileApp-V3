@@ -15,7 +15,6 @@ import api, { IMAGE_URL } from '../services/api';
 import { AuthContext } from '../context/AuthContext';
 import moment from 'moment';
 import CustomAlert from '../components/CustomAlert';
-import GlobalDownloadWidget from '../components/GlobalDownloadWidget';
 import messaging from '@react-native-firebase/messaging';
 import UpgradeOfferWidget from '../components/UpgradeOfferWidget';
 
@@ -208,7 +207,6 @@ const HomeScreen = ({ navigation }) => {
 
   const quickActions = [
     { id: 1, name: 'My Courses', icon: 'book-education', color: '#FEF2F2', iconColor: COLORS.primary, targetTab: 'My Courses', desc: 'View learning materials' },
-    { id: 2, name: 'Downloads', icon: 'download-circle-outline', color: '#FEF2F2', iconColor: COLORS.primary, targetTab: 'Downloads', desc: 'Offline content' },
     { id: 3, name: 'Payments', icon: 'credit-card-outline', color: '#FEF2F2', iconColor: COLORS.primary, targetTab: 'Payments', desc: 'Manage your fees' },
     { id: 4, name: 'Lumi Chat', icon: 'headphones', color: '#F0F9FF', iconColor: '#0EA5E9', targetTab: 'SupportChat', desc: 'LUMI Chat Support' },
     { id: 5, name: 'Delivery', icon: 'truck-delivery-outline', color: '#FEF2F2', iconColor: COLORS.primary, targetTab: 'Delivery', desc: 'Track materials' },
@@ -419,8 +417,6 @@ const HomeScreen = ({ navigation }) => {
                   setShowChatSelection(true);
                 } else if (item.nav === 'coming_soon') {
                   showAlert('Coming Soon!', 'This feature will be available in the next update.', 'warning');
-                } else if (item.targetTab === 'Downloads') {
-                  navigation.navigate('Downloads');
                 } else if (item.targetTab === 'SupportChat') {
                   navigation.navigate('SupportChat');
                 } else if (item.targetTab === 'Delivery') {
@@ -629,8 +625,6 @@ const HomeScreen = ({ navigation }) => {
           </View>
         </View>
       </Modal>
-
-      <GlobalDownloadWidget />
     </View>
   );
 };

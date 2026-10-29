@@ -12,14 +12,11 @@ import RNFS from 'react-native-fs';
 
 import api from '../services/api';
 import COLORS from '../constants/colors';
-import GlobalDownloadWidget from '../components/GlobalDownloadWidget';
-import downloadManager from '../services/downloadManager';
-import { DeviceEventEmitter } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import CustomAlert from '../components/CustomAlert';
 import { AuthContext } from '../context/AuthContext';
-import DownloadQualityModal from '../components/DownloadQualityModal';
+import SecureYouTubePlayerView, { parseYouTubeUrl } from '../components/SecureYouTubePlayerView';
 
 const KNOWN_TABS = [
     { key: 'recordings', title: 'Recordings', type: 'recording', icon: 'video-outline' },
@@ -34,119 +31,6 @@ const secureStoragePath = Platform.OS === 'ios' ? RNFS.LibraryDirectoryPath : RN
 
 const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onShowAlert, courseTitle, onTakeExam }) => {
     const [openFolders, setOpenFolders] = useState({});
-    const [downloadingItems, setDownloadingItems] = useState({});
-    const [qualityModalItem, setQualityModalItem] = useState(null);
-    const [downloadedItems, setDownloadedItems] = useState(new Set());
-
-    const checkDownloadedItems = async () => {
-        try {
-            const res = await AsyncStorage.getItem('my_downloads');
-            if (res) {
-                const parsed = JSON.parse(res);
-                const validIds = new Set();
-                for (const d of parsed) {
-                    const filePath = `${secureStoragePath}/f_${d.id}.mp4`;
-                    if (await RNFS.exists(filePath)) {
-                        const stat = await RNFS.stat(filePath);
-                        if (Number(stat.size) > 2 * 1024 * 1024) {
-                            validIds.add(d.id);
-                        }
-                    }
-                }
-                setDownloadedItems(validIds);
-            } else {
-                setDownloadedItems(new Set());
-            }
-        } catch (e) {
-            console.log("Error checking downloads:", e);
-        }
-    };
-
-    useEffect(() => {
-        // Load active downloads
-        const initialDownloads = downloadManager.getActiveDownloads();
-        const initialItems = {};
-        Object.keys(initialDownloads).forEach(id => {
-            initialItems[id] = initialDownloads[id].progress;
-        });
-        setDownloadingItems(initialItems);
-
-        const onProgress = (data) => {
-            setDownloadingItems(prev => ({ ...prev, [data.itemId]: data.progress }));
-        };
-
-        const onComplete = (data) => {
-            setDownloadingItems(prev => {
-                const newState = { ...prev };
-                delete newState[data.itemId];
-                return newState;
-            });
-            setDownloadedItems(prev => new Set([...prev, data.itemId]));
-            onShowAlert({ title: "Download Complete", msg: "Video has been saved successfully.", type: "success" });
-        };
-
-        const onError = (data) => {
-            setDownloadingItems(prev => {
-                const newState = { ...prev };
-                delete newState[data.itemId];
-                return newState;
-            });
-            onShowAlert({ title: "Download Error", msg: data.errorMsg || "Failed to download the video.", type: "error" });
-        };
-
-        const onExists = (data) => {
-            onShowAlert({ title: "Already Downloaded", msg: "You can find this video in My Downloads section or Play Offline.", type: "warning" });
-        };
-
-        const onDeleted = (data) => {
-            if (data?.itemId) {
-                setDownloadedItems(prev => {
-                    const updated = new Set(prev);
-                    updated.delete(data.itemId);
-                    return updated;
-                });
-            }
-        };
-
-        const onCancelled = (data) => {
-            if (data?.itemId) {
-                setDownloadingItems(prev => {
-                    const newState = { ...prev };
-                    delete newState[data.itemId];
-                    return newState;
-                });
-            }
-        };
-
-        const onPaused = (data) => {
-            if (data?.itemId) {
-                setDownloadingItems(prev => ({
-                    ...prev,
-                    [data.itemId]: 'Paused'
-                }));
-            }
-        };
-
-        const progressSub = DeviceEventEmitter.addListener('DOWNLOAD_PROGRESS', onProgress);
-        const completeSub = DeviceEventEmitter.addListener('DOWNLOAD_COMPLETE', onComplete);
-        const errorSub = DeviceEventEmitter.addListener('DOWNLOAD_ERROR', onError);
-        const existsSub = DeviceEventEmitter.addListener('DOWNLOAD_ALREADY_EXISTS', onExists);
-        const deletedSub = DeviceEventEmitter.addListener('DOWNLOAD_DELETED', onDeleted);
-        const cancelledSub = DeviceEventEmitter.addListener('DOWNLOAD_CANCELLED', onCancelled);
-        const pausedSub = DeviceEventEmitter.addListener('DOWNLOAD_PAUSED', onPaused);
-
-        checkDownloadedItems();
-
-        return () => {
-            progressSub.remove();
-            completeSub.remove();
-            errorSub.remove();
-            existsSub.remove();
-            deletedSub.remove();
-            cancelledSub.remove();
-            pausedSub.remove();
-        };
-    }, []);
 
     const toggleFolder = (folderId) => setOpenFolders(prev => ({
         ...prev,
@@ -364,10 +248,6 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
         }
     };
 
-    const handleVideoDownload = (item) => {
-        setQualityModalItem(item);
-    };
-
     const renderItemCard = (item) => {
         let imgUri = null;
 
@@ -379,12 +259,17 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
             imgUri = `https://imacampus.online/api/storage/documents/${item.fileName}`;
         }
 
-        const downloadProgress = downloadingItems[item.id];
-        const isDownloading = downloadProgress !== undefined;
-        // 🔥 NEW: මේ වීඩියෝ එක දැනටමත් Download වෙලාද කියලා බලනවා 🔥
-        const isDownloaded = downloadedItems.has(item.id);
+        const isDoc = isDocumentType;
+        const isLive = isLiveType;
+        const isPaper = isPaperType;
 
-        const canDownloadVideo = !isDocumentType && !isLiveType && !isPaperType && item.link && item.meetingId;
+        const isYtUrl = (url) => {
+            if (!url) return false;
+            return /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|live\/|shorts\/))([\w-]{11})/.test(url);
+        };
+
+        const hasYt = !!(item.youtubeLink || (item.link && isYtUrl(item.link)));
+        const hasZoom = !!(item.link && !isYtUrl(item.link));
 
         return (
             <View key={item.id} style={styles.itemCard}>
@@ -408,7 +293,7 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
                     )}
 
                     <View style={styles.actionRow}>
-                        {isPaperType ? (
+                        {isPaper ? (
                             <TouchableOpacity
                                 onPress={() => onTakeExam && onTakeExam(item)}
                                 style={[styles.takeExamBtn, { flex: 1 }]}
@@ -417,7 +302,7 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
                                 <Icon name="format-list-checks" size={18} color="#ffffff" style={{ marginRight: 6 }} />
                                 <Text style={styles.takeExamBtnText}>Take MCQ Exam</Text>
                             </TouchableOpacity>
-                        ) : isLiveType ? (
+                        ) : isLive ? (
                             <TouchableOpacity
                                 onPress={() => handleOpenLive(item)}
                                 style={[styles.watchBtn, { flex: 1, backgroundColor: '#059669', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }]}
@@ -426,80 +311,84 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
                                 <Icon name="video" size={18} color="#ffffff" style={{ marginRight: 6 }} />
                                 <Text style={styles.watchBtnText}>Join Live Class</Text>
                             </TouchableOpacity>
-                        ) : (
-                            <TouchableOpacity
-                                onPress={() => {
-                                    if (isDocumentType) {
+                        ) : isDoc ? (
+                            <>
+                                <TouchableOpacity
+                                    onPress={() => {
                                         const docUrl = item.link || item.url || item.file || item.fileName;
                                         if (docUrl) {
                                             let link = docUrl.startsWith('http') ? docUrl : `https://imacampus.online/api/storage/documents/${docUrl}`;
                                             Linking.openURL(link).catch(err => onShowAlert({ title: "Error", msg: "Could not open document.", type: "error" }));
                                         }
-                                    } else onPlay(item);
-                                }}
-                                style={[styles.watchBtn, { flex: 1 }]}
-                            >
-                                <Text style={styles.watchBtnText}>{isDocumentType ? 'View Document' : 'Play Recording'}</Text>
-                            </TouchableOpacity>
-                        )}
+                                    }}
+                                    style={[styles.watchBtn, { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }]}
+                                    activeOpacity={0.8}
+                                >
+                                    <Icon name="file-document-outline" size={18} color="#ffffff" style={{ marginRight: 6 }} />
+                                    <Text style={styles.watchBtnText}>View Document</Text>
+                                </TouchableOpacity>
 
-                        {isDocumentType && (
-                            <TouchableOpacity onPress={() => handleDocDownload(item)} style={styles.docDownloadBtn}>
-                                <Icon name="download" size={16} color={COLORS.primary} />
-                                <Text style={styles.docDownloadText}>Save</Text>
-                            </TouchableOpacity>
-                        )}
+                                <TouchableOpacity onPress={() => handleDocDownload(item)} style={styles.docDownloadBtn} activeOpacity={0.8}>
+                                    <Icon name="download" size={16} color={COLORS.primary} />
+                                    <Text style={styles.docDownloadText}>Save</Text>
+                                </TouchableOpacity>
+                            </>
+                        ) : (
+                            /* 🔥 RECORDINGS - YOUTUBE / ZOOM DYNAMIC BUTTONS 🔥 */
+                            hasYt && hasZoom ? (
+                                <>
+                                    <TouchableOpacity
+                                        onPress={() => onPlay(item, 'yt')}
+                                        style={[styles.playBtn, styles.ytBtn, { flex: 1 }]}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Icon name="youtube" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                                        <Text style={styles.playBtnText}>YouTube</Text>
+                                    </TouchableOpacity>
 
-                        {/* 🔥 NEW: බට්න් එකේ පාට සහ අකුරු වෙනස් වෙන කෑල්ල 🔥 */}
-                        {canDownloadVideo && (
-                            <TouchableOpacity
-                                onPress={() => {
-                                    if (isDownloaded) {
-                                        onShowAlert({ title: "Already Downloaded", msg: "You can find this video in My Downloads section.", type: "warning" });
-                                    } else if (downloadProgress === 'Paused') {
-                                        downloadManager.resumeDownload(item.id);
-                                    } else {
-                                        handleVideoDownload(item);
-                                    }
-                                }}
-                                style={[
-                                    styles.docDownloadBtn,
-                                    isDownloaded ? { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' } : {} // ඩවුන්ලෝඩ් වෙලා නම් කොළ පාට වෙනවා
-                                ]}
-                                disabled={isDownloading && downloadProgress !== 'Paused'}
-                            >
-                                {isDownloading ? (
-                                    <>
-                                        {downloadProgress !== 'Paused' && (
-                                            <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />
-                                        )}
-                                        {downloadProgress === 'Paused' && (
-                                            <Icon name="pause-circle-outline" size={16} color="#6B7280" style={{ marginRight: 4 }} />
-                                        )}
-                                        <Text style={[styles.docDownloadText, downloadProgress === 'Paused' && { color: '#6B7280' }]}>
-                                            {downloadProgress === '...'
-                                                ? 'Extracting...'
-                                                : downloadProgress === true
-                                                    ? 'Starting...'
-                                                    : downloadProgress === 'Paused'
-                                                        ? 'Resume'
-                                                        : `${downloadProgress}%`}
-                                        </Text>
-                                    </>
-                                ) : isDownloaded ? (
-                                    <>
-                                        <Icon name="check-circle" size={16} color="#059669" />
-                                        <Text style={[styles.docDownloadText, { color: '#059669' }]}>Downloaded</Text>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Icon name="download" size={16} color={COLORS.primary} />
-                                        <Text style={styles.docDownloadText}>Download</Text>
-                                    </>
-                                )}
-                            </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={() => onPlay(item, 'zoom')}
+                                        style={[styles.playBtn, styles.zoomBtn, { flex: 1 }]}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Icon name="video" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                                        <Text style={styles.playBtnText}>Zoom</Text>
+                                    </TouchableOpacity>
+                                </>
+                            ) : hasYt ? (
+                                <TouchableOpacity
+                                    onPress={() => onPlay(item, 'yt')}
+                                    style={[styles.playBtn, styles.ytBtn, { flex: 1 }]}
+                                    activeOpacity={0.8}
+                                >
+                                    <Icon name="youtube" size={19} color="#FFFFFF" style={{ marginRight: 8 }} />
+                                    <Text style={styles.playBtnText}>Play Recording</Text>
+                                </TouchableOpacity>
+                            ) : hasZoom ? (
+                                <TouchableOpacity
+                                    onPress={() => onPlay(item, 'zoom')}
+                                    style={[styles.playBtn, styles.zoomBtn, { flex: 1 }]}
+                                    activeOpacity={0.8}
+                                >
+                                    <Icon name="video" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                                    <Text style={styles.playBtnText}>Play Recording</Text>
+                                </TouchableOpacity>
+                            ) : (item.url || item.file) ? (
+                                <TouchableOpacity
+                                    onPress={() => onPlay(item, 'auto')}
+                                    style={[styles.playBtn, styles.defaultPlayBtn, { flex: 1 }]}
+                                    activeOpacity={0.8}
+                                >
+                                    <Icon name="play-circle" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                                    <Text style={styles.playBtnText}>Play Recording</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                <View style={[styles.playBtn, styles.disabledPlayBtn, { flex: 1 }]}>
+                                    <Icon name="video-off" size={18} color="#9CA3AF" style={{ marginRight: 6 }} />
+                                    <Text style={[styles.playBtnText, { color: '#9CA3AF' }]}>Unavailable</Text>
+                                </View>
+                            )
                         )}
-
                     </View>
                 </View>
             </View>
@@ -507,57 +396,45 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
     };
 
     return (
-        <>
-            <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-                {groupedItems.map(({ folder, items }) => {
-                    const isOpen = isFolderOpen(folder.id);
-                    return (
-                        <View key={`folder-${folder.id}`} style={styles.monthSection}>
-                            <TouchableOpacity
-                                style={[styles.monthHeader, { alignSelf: 'stretch', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 }]}
-                                onPress={() => toggleFolder(folder.id)} activeOpacity={0.7}
-                            >
-                                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 10 }}>
-                                    <Icon name="folder-open" size={18} color="white" style={{ marginRight: 10 }} />
-                                    <Text style={[styles.monthHeaderText, { fontSize: 14 }]} numberOfLines={1}>{folder.title || folder.name}</Text>
-                                </View>
-                                <Icon name={isOpen ? "chevron-up" : "chevron-down"} size={22} color="white" />
-                            </TouchableOpacity>
+        <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+            {groupedItems.map(({ folder, items }) => {
+                const isOpen = isFolderOpen(folder.id);
+                return (
+                    <View key={`folder-${folder.id}`} style={styles.monthSection}>
+                        <TouchableOpacity
+                            style={[styles.monthHeader, { alignSelf: 'stretch', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 }]}
+                            onPress={() => toggleFolder(folder.id)} activeOpacity={0.7}
+                        >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 10 }}>
+                                <Icon name="folder-open" size={18} color="white" style={{ marginRight: 10 }} />
+                                <Text style={[styles.monthHeaderText, { fontSize: 14 }]} numberOfLines={1}>{folder.title || folder.name}</Text>
+                            </View>
+                            <Icon name={isOpen ? "chevron-up" : "chevron-down"} size={22} color="white" />
+                        </TouchableOpacity>
 
-                            {isOpen && (
-                                <View style={{ paddingLeft: 10, marginTop: 5 }}>
-                                    {items.length === 0 ? (
-                                        <Text style={{ color: '#9CA3AF', fontSize: 12, fontStyle: 'italic', marginBottom: 15, paddingLeft: 10 }}>This folder is empty.</Text>
-                                    ) : (items.map(item => renderItemCard(item)))}
-                                </View>
-                            )}
-                        </View>
-                    );
-                })}
-
-                {uncategorizedItems.length > 0 && (
-                    <View style={styles.monthSection}>
-                        <View style={[styles.monthHeader, { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', backgroundColor: '#4B5563', paddingVertical: 10 }]}>
-                            <Icon name="layers-outline" size={18} color="white" style={{ marginRight: 10 }} />
-                            <Text style={[styles.monthHeaderText, { fontSize: 14 }]}>General Content</Text>
-                        </View>
-                        <View style={{ paddingLeft: 10, marginTop: 5 }}>
-                            {uncategorizedItems.map(item => renderItemCard(item))}
-                        </View>
+                        {isOpen && (
+                            <View style={{ paddingLeft: 10, marginTop: 5 }}>
+                                {items.length === 0 ? (
+                                    <Text style={{ color: '#9CA3AF', fontSize: 12, fontStyle: 'italic', marginBottom: 15, paddingLeft: 10 }}>This folder is empty.</Text>
+                                ) : (items.map(item => renderItemCard(item)))}
+                            </View>
+                        )}
                     </View>
-                )}
-            </ScrollView>
+                );
+            })}
 
-            <DownloadQualityModal
-                visible={!!qualityModalItem}
-                item={qualityModalItem}
-                courseTitle={courseTitle}
-                onClose={() => setQualityModalItem(null)}
-                onSelectQuality={(selectedItem, quality) => {
-                    downloadManager.startDownload(selectedItem, courseTitle, quality);
-                }}
-            />
-        </>
+            {uncategorizedItems.length > 0 && (
+                <View style={styles.monthSection}>
+                    <View style={[styles.monthHeader, { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', backgroundColor: '#4B5563', paddingVertical: 10 }]}>
+                        <Icon name="layers-outline" size={18} color="white" style={{ marginRight: 10 }} />
+                        <Text style={[styles.monthHeaderText, { fontSize: 14 }]}>General Content</Text>
+                    </View>
+                    <View style={{ paddingLeft: 10, marginTop: 5 }}>
+                        {uncategorizedItems.map(item => renderItemCard(item))}
+                    </View>
+                </View>
+            )}
+        </ScrollView>
     );
 };
 
@@ -607,34 +484,55 @@ const CourseContentScreen = ({ route, navigation }) => {
         return match ? match[1] : null;
     };
 
-    // 🔥 OFFLINE PLAYBACK LOGIC ADDED HERE 🔥
-    const handlePlayVideo = async (item) => {
-        const videoLink = item.youtubeLink || item.link || item.url || item.file;
-        if (!videoLink) return Alert.alert("Error", "Video link is unavailable.");
+    // 🔥 PLAYBACK LOGIC (YOUTUBE / ZOOM / OFFLINE) 🔥
+    const handlePlayVideo = async (item, forcedType = 'auto') => {
+        let videoLink = null;
+        let isYt = false;
+        let ytId = null;
+
+        if (forcedType === 'yt') {
+            videoLink = item.youtubeLink || (getYouTubeID(item.link) ? item.link : null);
+            ytId = getYouTubeID(videoLink);
+            isYt = true;
+        } else if (forcedType === 'zoom') {
+            videoLink = (item.link && !getYouTubeID(item.link)) ? item.link : (item.link || item.url || item.file);
+            isYt = false;
+        } else {
+            const detectedYt = getYouTubeID(item.youtubeLink) || getYouTubeID(item.link);
+            if (detectedYt) {
+                videoLink = item.youtubeLink || item.link;
+                ytId = detectedYt;
+                isYt = true;
+            } else {
+                videoLink = item.link || item.url || item.file;
+                isYt = false;
+            }
+        }
+
+        if (!videoLink && !ytId) return Alert.alert("Error", "Video link is unavailable.");
 
         saveToRecent(item);
 
-        // Check if file is downloaded securely in App Internal Storage
-        const securePath = `${secureStoragePath}/f_${item.id}.mp4`;
-        try {
-            const fileExists = await RNFS.exists(securePath);
-            if (fileExists) {
-                const stat = await RNFS.stat(securePath);
-                if (stat.size > 2 * 1024 * 1024) { // Valid video file check
-                    setPlayingItem({ ...item, link: `file://${securePath}`, isYouTube: false, isOffline: true });
-                    return; // Play offline and exit function
-                }
-            }
-        } catch (err) {
-            console.log("Offline playback check error: ", err);
-        }
-
-        // If not downloaded, proceed with normal Online Playback
-        const ytId = getYouTubeID(videoLink);
-        if (ytId) {
-            setPlayingItem({ ...item, isYouTube: true, ytId: ytId });
+        if (isYt && ytId) {
+            setPlayingItem({ ...item, isYouTube: true, ytId: ytId, link: videoLink });
             setYtPlaying(true);
         } else {
+            // Check if file is downloaded securely in App Internal Storage
+            const securePath = `${secureStoragePath}/f_${item.id}.mp4`;
+            try {
+                const fileExists = await RNFS.exists(securePath);
+                if (fileExists) {
+                    const stat = await RNFS.stat(securePath);
+                    if (stat.size > 2 * 1024 * 1024) { // Valid video file check
+                        setPlayingItem({ ...item, link: `file://${securePath}`, isYouTube: false, isOffline: true });
+                        return; // Play offline and exit function
+                    }
+                }
+            } catch (err) {
+                console.log("Offline playback check error: ", err);
+            }
+
+            // Online Zoom or Direct Video Playback
             setPlayingItem({ ...item, link: videoLink, isYouTube: false, isOffline: false });
         }
     };
@@ -723,97 +621,13 @@ const CourseContentScreen = ({ route, navigation }) => {
 
                     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' }}>
                         {playingItem?.isYouTube ? (
-                            <View style={{ width: width, paddingBottom: 20 }}>
-                                <View style={{ width: width, aspectRatio: 16 / 9, backgroundColor: 'black' }}>
-                                    <WebView
-                                        ref={webViewRef}
-                                        source={{
-                                            html: `
-                                <!DOCTYPE html>
-                                <html>
-                                <head>
-                                    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-                                    <style>
-                                        body { margin: 0; padding: 0; background-color: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; }
-                                        .video-container { position: relative; width: 100vw; height: 56.25vw; pointer-events: none; }
-                                        iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
-                                    </style>
-                                </head>
-                                <body>
-                                    <div class="video-container">
-                                        <div id="player"></div>
-                                    </div>
-                                    <script>
-                                        var tag = document.createElement('script');
-                                        tag.src = "https://www.youtube.com/iframe_api";
-                                        var firstScriptTag = document.getElementsByTagName('script')[0];
-                                        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-                                        var player;
-                                        function onYouTubeIframeAPIReady() {
-                                            player = new YT.Player('player', {
-                                                videoId: '${playingItem.ytId}',
-                                                playerVars: {
-                                                    'autoplay': 1, 'controls': 0, 'rel': 0, 'modestbranding': 1, 'playsinline': 1, 'fs': 0
-                                                },
-                                                events: {
-                                                    'onReady': function(event) { event.target.playVideo(); },
-                                                    'onStateChange': function(event) {
-                                                        if(event.data === YT.PlayerState.PLAYING) {
-                                                            window.ReactNativeWebView.postMessage(JSON.stringify({ event: 'playing' }));
-                                                        } else if(event.data === YT.PlayerState.PAUSED) {
-                                                            window.ReactNativeWebView.postMessage(JSON.stringify({ event: 'paused' }));
-                                                        } else if(event.data === YT.PlayerState.ENDED) {
-                                                            window.ReactNativeWebView.postMessage(JSON.stringify({ event: 'ended' }));
-                                                        }
-                                                    }
-                                                }
-                                            });
-                                        }
-
-                                        window.addEventListener('message', function(event) {
-                                            if (event.data === 'play') player.playVideo();
-                                            if (event.data === 'pause') player.pauseVideo();
-                                        });
-                                    </script>
-                                </body>
-                                </html>
-                            ` }}
-                                        style={{ flex: 1, backgroundColor: 'black' }}
-                                        originWhitelist={['*']} javaScriptEnabled={true} domStorageEnabled={true}
-                                        allowsInlineMediaPlayback={true} mediaPlaybackRequiresUserAction={false}
-                                        scrollEnabled={false} bounces={false}
-                                        onMessage={(event) => {
-                                            try {
-                                                const data = JSON.parse(event.nativeEvent.data);
-                                                if (data.event === 'playing') setYtPlaying(true);
-                                                if (data.event === 'paused') setYtPlaying(false);
-                                                if (data.event === 'ended') setYtPlaying(false);
-                                            } catch (e) { }
-                                        }}
-                                        onShouldStartLoadWithRequest={(request) => {
-                                            if (request.url.startsWith('intent://') || request.url.startsWith('vnd.youtube')) return false;
-                                            return true;
-                                        }}
-                                    />
-                                </View>
-
-                                <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 30 }}>
-                                    <TouchableOpacity
-                                        onPress={() => {
-                                            const nextState = !ytPlaying;
-                                            setYtPlaying(nextState);
-                                            webViewRef.current?.injectJavaScript(`
-                                    window.postMessage('${nextState ? 'play' : 'pause'}', '*');
-                                    true;
-                                `);
-                                        }}
-                                        style={{ backgroundColor: COLORS.primary, width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5 }}
-                                    >
-                                        <Icon name={ytPlaying ? "pause" : "play"} size={35} color="white" style={!ytPlaying ? { marginLeft: 5 } : {}} />
-                                    </TouchableOpacity>
-                                </View>
-
+                            <View style={{ width: width, aspectRatio: 16 / 9 }}>
+                                <SecureYouTubePlayerView
+                                    videoId={playingItem.ytId}
+                                    url={playingItem.link || playingItem.youtubeLink}
+                                    autoPlay={true}
+                                    style={{ width: width, height: '100%' }}
+                                />
                             </View>
                         ) : (
                             // 🔥 FIX: Supports Both Online & Offline Video Playback through WebView 
@@ -853,7 +667,6 @@ const CourseContentScreen = ({ route, navigation }) => {
                     </View>
                 </View>
             </Modal>
-            <GlobalDownloadWidget />
         </View>
     );
 };
@@ -885,6 +698,12 @@ const styles = StyleSheet.create({
     watchBtnText: { color: 'white', fontWeight: '800', fontSize: 12, textTransform: 'uppercase' },
     docDownloadBtn: { backgroundColor: '#FEF2F2', borderRadius: 12, paddingHorizontal: 15, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', borderWidth: 1, borderColor: '#FECACA' },
     docDownloadText: { color: COLORS.primary, fontWeight: '800', fontSize: 12, marginLeft: 6, textTransform: 'uppercase' },
+    playBtn: { paddingVertical: 12, paddingHorizontal: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+    playBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
+    ytBtn: { backgroundColor: '#DC2626' },
+    zoomBtn: { backgroundColor: '#2563EB' },
+    defaultPlayBtn: { backgroundColor: '#1A1A1A' },
+    disabledPlayBtn: { backgroundColor: '#E5E7EB', elevation: 0 },
     emptyContainer: { alignItems: 'center', marginTop: 60 },
     emptyIconBox: { width: 100, height: 100, borderRadius: 50, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center', marginBottom: 20, elevation: 2 },
     emptyTitle: { fontSize: 20, fontWeight: '900', color: '#1A1A1A', marginBottom: 10 },
