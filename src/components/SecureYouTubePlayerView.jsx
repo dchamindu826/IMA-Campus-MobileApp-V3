@@ -376,6 +376,11 @@ export function generatePlayerHtml(videoId, listId, autoPlay = true) {
 </html>`;
 }
 
+let ScreenOrientation = null;
+try {
+  ScreenOrientation = require('expo-screen-orientation');
+} catch (_) {}
+
 export default function SecureYouTubePlayerView({ url, autoPlay = true, onStatusChange, onFullscreenChange, style }) {
   const [fullscreen, setFullscreen] = useState(false);
   const { width, height } = useWindowDimensions();
@@ -385,17 +390,40 @@ export default function SecureYouTubePlayerView({ url, autoPlay = true, onStatus
   const videoId = parsed?.videoId || null;
   const listId = parsed?.listId || null;
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = async () => {
     const next = !fullscreen;
     setFullscreen(next);
     onFullscreenChange && onFullscreenChange(next);
+    try {
+      if (ScreenOrientation && ScreenOrientation.lockAsync) {
+        if (next) {
+          const LANDSCAPE = ScreenOrientation.OrientationLock?.LANDSCAPE || 2;
+          await ScreenOrientation.lockAsync(LANDSCAPE);
+        } else {
+          const PORTRAIT_UP = ScreenOrientation.OrientationLock?.PORTRAIT_UP || 1;
+          await ScreenOrientation.lockAsync(PORTRAIT_UP);
+        }
+      }
+    } catch (err) {
+      console.log('Orientation lock error:', err);
+    }
   };
+
+  useEffect(() => {
+    return () => {
+      try {
+        if (ScreenOrientation && ScreenOrientation.lockAsync) {
+          const PORTRAIT_UP = ScreenOrientation.OrientationLock?.PORTRAIT_UP || 1;
+          ScreenOrientation.lockAsync(PORTRAIT_UP).catch(() => {});
+        }
+      } catch (_) {}
+    };
+  }, []);
 
   useEffect(() => {
     if (!fullscreen) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      setFullscreen(false);
-      onFullscreenChange && onFullscreenChange(false);
+      toggleFullscreen();
       return true;
     });
     return () => sub.remove();
@@ -461,8 +489,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    zIndex: 9999,
-    elevation: 9999,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 99999,
+    elevation: 99999,
     backgroundColor: '#000',
   },
   web: {

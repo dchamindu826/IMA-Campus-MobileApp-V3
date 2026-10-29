@@ -446,6 +446,7 @@ const CourseContentScreen = ({ route, navigation }) => {
 
     const [playingItem, setPlayingItem] = useState(null);
     const [ytPlaying, setYtPlaying] = useState(true);
+    const [isYtFullscreen, setIsYtFullscreen] = useState(false);
     const webViewRef = useRef(null);
 
     const [alertVisible, setAlertVisible] = useState(false);
@@ -607,26 +608,29 @@ const CourseContentScreen = ({ route, navigation }) => {
             </View>
 
             {/* 🔴 SECURE VIDEO PLAYER MODAL 🔴 */}
-            <Modal visible={!!playingItem} animationType="slide" onRequestClose={() => { setPlayingItem(null); setYtPlaying(false); }}>
+            <Modal visible={!!playingItem} animationType="slide" onRequestClose={() => { setPlayingItem(null); setYtPlaying(false); setIsYtFullscreen(false); }}>
                 <View style={{ flex: 1, backgroundColor: 'black' }}>
 
-                    <View style={[styles.playerHeader, { paddingTop: insets.top + 15 }]}>
-                        <TouchableOpacity onPress={() => { setPlayingItem(null); setYtPlaying(false); }} style={styles.backBtn}>
-                            <Icon name="close" size={24} color="white" />
-                        </TouchableOpacity>
-                        <Text style={{ color: 'white', fontWeight: 'bold', flex: 1, fontSize: 16 }} numberOfLines={1}>
-                            {playingItem?.isOffline ? `(Offline) ${playingItem?.title}` : playingItem?.title}
-                        </Text>
-                    </View>
+                    {!isYtFullscreen && (
+                        <View style={[styles.playerHeader, { paddingTop: insets.top + 15 }]}>
+                            <TouchableOpacity onPress={() => { setPlayingItem(null); setYtPlaying(false); setIsYtFullscreen(false); }} style={styles.backBtn}>
+                                <Icon name="close" size={24} color="white" />
+                            </TouchableOpacity>
+                            <Text style={{ color: 'white', fontWeight: 'bold', flex: 1, fontSize: 16 }} numberOfLines={1}>
+                                {playingItem?.isOffline ? `(Offline) ${playingItem?.title}` : playingItem?.title}
+                            </Text>
+                        </View>
+                    )}
 
                     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' }}>
                         {playingItem?.isYouTube ? (
-                            <View style={{ width: width, aspectRatio: 16 / 9 }}>
+                            <View style={isYtFullscreen ? { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', zIndex: 9999 } : { width: width, aspectRatio: 16 / 9 }}>
                                 <SecureYouTubePlayerView
                                     videoId={playingItem.ytId}
                                     url={playingItem.link || playingItem.youtubeLink}
                                     autoPlay={true}
-                                    style={{ width: width, height: '100%' }}
+                                    onFullscreenChange={(fs) => setIsYtFullscreen(fs)}
+                                    style={{ width: '100%', height: '100%' }}
                                 />
                             </View>
                         ) : (

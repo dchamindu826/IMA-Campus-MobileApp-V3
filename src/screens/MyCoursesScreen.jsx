@@ -15,6 +15,7 @@ const MyCoursesScreen = ({ navigation }) => {
   const [step, setStep] = useState(1);
   const [selectedBusiness, setSelectedBusiness] = useState(null);
   const [selectedBatch, setSelectedBatch] = useState(null);
+  const [classTypeFilter, setClassTypeFilter] = useState('All'); // 'All', 'Theory', 'Paper'
 
   const insets = useSafeAreaInsets();
 
@@ -37,9 +38,11 @@ const MyCoursesScreen = ({ navigation }) => {
     if (step === 3) {
       setStep(2);
       setSelectedBatch(null);
+      setClassTypeFilter('All');
     } else if (step === 2) {
       setStep(1);
       setSelectedBusiness(null);
+      setClassTypeFilter('All');
     } else {
       navigation.goBack();
     }
@@ -66,12 +69,33 @@ const MyCoursesScreen = ({ navigation }) => {
     return Array.from(map.values());
   }, [mySubjects, selectedBusiness]);
 
+  const batchSubjects = useMemo(() => {
+    if (!selectedBatch) return [];
+    return mySubjects.filter(s => s.businessName === selectedBatch.businessName && s.batchName === selectedBatch.name);
+  }, [mySubjects, selectedBatch]);
+
+  const { totalTheory, totalPaper } = useMemo(() => {
+    let theory = 0;
+    let paper = 0;
+    batchSubjects.forEach(s => {
+      const isPaper = parseInt(s.courseType || s.classType || 1, 10) === 2;
+      if (isPaper) paper++;
+      else theory++;
+    });
+    return { totalTheory: theory, totalPaper: paper };
+  }, [batchSubjects]);
+
   const subjectsWithHeaders = useMemo(() => {
     if (!selectedBatch) return [];
-    const batchSubjects = mySubjects.filter(s => s.businessName === selectedBatch.businessName && s.batchName === selectedBatch.name);
+    let list = batchSubjects;
+    if (classTypeFilter === 'Theory') {
+      list = list.filter(s => parseInt(s.courseType || s.classType || 1, 10) !== 2);
+    } else if (classTypeFilter === 'Paper') {
+      list = list.filter(s => parseInt(s.courseType || s.classType || 1, 10) === 2);
+    }
 
     const streamMap = new Map();
-    batchSubjects.forEach(s => {
+    list.forEach(s => {
       const groupName = s.groupName || "General Subjects";
       if (!streamMap.has(groupName)) streamMap.set(groupName, []);
       streamMap.get(groupName).push(s);
@@ -84,8 +108,7 @@ const MyCoursesScreen = ({ navigation }) => {
     });
 
     return finalList;
-  }, [mySubjects, selectedBatch]);
-
+  }, [batchSubjects, classTypeFilter]);
 
   const renderBusinessCard = ({ item }) => (
     <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => { setSelectedBusiness(item); setStep(2); }}>
@@ -101,7 +124,7 @@ const MyCoursesScreen = ({ navigation }) => {
   );
 
   const renderBatchCard = ({ item }) => (
-    <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => { setSelectedBatch(item); setStep(3); }}>
+    <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => { setSelectedBatch(item); setClassTypeFilter('All'); setStep(3); }}>
       <View style={styles.logoContainer}>
         <Image source={{ uri: `${IMAGE_URL}icons/${item.logo || 'default.png'}` }} style={styles.logo} resizeMode="contain" />
       </View>
@@ -124,6 +147,7 @@ const MyCoursesScreen = ({ navigation }) => {
 
     const hasValidImage = item.lecturerImage && item.lecturerImage !== 'null' && item.lecturerImage !== 'default.png' && item.lecturerImage.trim() !== '';
     const lecturerName = item.description && item.description.toUpperCase() !== 'TBA' ? item.description : 'TBA';
+    const isPaper = parseInt(item.courseType || item.classType || 1, 10) === 2;
 
     return (
       <TouchableOpacity style={styles.courseCard} activeOpacity={0.8} onPress={() => navigation.navigate('CourseContent', { courseId: item.id, courseTitle: item.name, hasAccess: true })}>
@@ -136,8 +160,19 @@ const MyCoursesScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.cardInfo}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4, flexWrap: 'wrap', gap: 6 }}>
+            {isPaper ? (
+              <View style={styles.paperBadge}>
+                <Text style={styles.paperBadgeText}>📝 Paper Class</Text>
+              </View>
+            ) : (
+              <View style={styles.theoryBadge}>
+                <Text style={styles.theoryBadgeText}>📘 Theory</Text>
+              </View>
+            )}
+            {item.code ? <Text style={styles.courseCode}>{item.code}</Text> : null}
+          </View>
           <Text style={styles.courseName} numberOfLines={2}>{item.name}</Text>
-          {item.code ? <Text style={styles.courseCode}>{item.code}</Text> : null}
           <View style={styles.metaRow}>
             <Icon name="account-tie" size={14} color="#666" style={{ marginRight: 6 }} />
             <Text style={styles.lecturer} numberOfLines={1}>{lecturerName}</Text>
@@ -173,6 +208,35 @@ const MyCoursesScreen = ({ navigation }) => {
         </View>
       </LinearGradient>
 
+      {step === 3 && totalTheory > 0 && totalPaper > 0 && (
+        <View style={styles.filterBar}>
+          <TouchableOpacity 
+            onPress={() => setClassTypeFilter('All')} 
+            style={[styles.filterChip, classTypeFilter === 'All' && styles.filterChipActive]}
+          >
+            <Text style={[styles.filterChipText, classTypeFilter === 'All' && styles.filterChipTextActive]}>
+              All ({totalTheory + totalPaper})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => setClassTypeFilter('Theory')} 
+            style={[styles.filterChip, classTypeFilter === 'Theory' && styles.filterChipActiveBlue]}
+          >
+            <Text style={[styles.filterChipText, classTypeFilter === 'Theory' && styles.filterChipTextActiveBlue]}>
+              📘 Theory ({totalTheory})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => setClassTypeFilter('Paper')} 
+            style={[styles.filterChip, classTypeFilter === 'Paper' && styles.filterChipActiveAmber]}
+          >
+            <Text style={[styles.filterChipText, classTypeFilter === 'Paper' && styles.filterChipTextActiveAmber]}>
+              📝 Paper ({totalPaper})
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.content}>
         {loading && !refreshing ? <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 50 }} /> : (
           <FlatList
@@ -202,6 +266,22 @@ const styles = StyleSheet.create({
   backBtn: { marginRight: 15, padding: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
   headerTitle: { fontSize: 20, fontWeight: '900', color: 'white', letterSpacing: 0.5 },
   subHeaderText: { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginTop: 2 },
+  
+  filterBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 4, gap: 8 },
+  filterChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: 'white', borderWidth: 1, borderColor: '#E5E7EB', elevation: 1 },
+  filterChipActive: { backgroundColor: '#1E293B', borderColor: '#1E293B', elevation: 3 },
+  filterChipActiveBlue: { backgroundColor: '#2563EB', borderColor: '#2563EB', elevation: 3 },
+  filterChipActiveAmber: { backgroundColor: '#D97706', borderColor: '#D97706', elevation: 3 },
+  filterChipText: { fontSize: 12, fontWeight: '800', color: '#4B5563' },
+  filterChipTextActive: { color: 'white' },
+  filterChipTextActiveBlue: { color: 'white' },
+  filterChipTextActiveAmber: { color: 'white' },
+
+  theoryBadge: { backgroundColor: '#DBEAFE', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: '#BFDBFE' },
+  theoryBadgeText: { fontSize: 10, fontWeight: '900', color: '#1D4ED8' },
+  paperBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: '#FDE68A' },
+  paperBadgeText: { fontSize: 10, fontWeight: '900', color: '#B45309' },
+
   content: { flex: 1 },
   listContainer: { padding: 20, paddingBottom: 100 },
   card: { flexDirection: 'row', backgroundColor: 'white', padding: 16, borderRadius: 20, marginBottom: 15, alignItems: 'center', elevation: 2, borderWidth: 1, borderColor: '#F3F4F6' },
@@ -213,7 +293,7 @@ const styles = StyleSheet.create({
   courseCard: { flexDirection: 'row', backgroundColor: 'white', padding: 16, borderRadius: 20, marginBottom: 15, alignItems: 'center', elevation: 3, borderWidth: 1, borderColor: '#F3F4F6' },
   iconBox: { width: 55, height: 55, borderRadius: 15, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#FECACA' },
   courseName: { fontSize: 15, fontWeight: '900', color: '#1A1A1A', marginBottom: 4, lineHeight: 20 },
-  courseCode: { fontSize: 10, fontWeight: '900', color: COLORS.primary, backgroundColor: '#FEF2F2', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, marginBottom: 8, letterSpacing: 0.5 },
+  courseCode: { fontSize: 10, fontWeight: '900', color: COLORS.primary, backgroundColor: '#FEF2F2', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, marginBottom: 4, letterSpacing: 0.5 },
   metaRow: { flexDirection: 'row', alignItems: 'center' },
   lecturer: { fontSize: 12, color: '#4B5563', fontWeight: '700', flex: 1 },
   emptyContainer: { alignItems: 'center', marginTop: 60, paddingHorizontal: 20 },

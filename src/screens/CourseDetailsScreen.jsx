@@ -24,6 +24,7 @@ const CourseDetailsScreen = ({ route, navigation }) => {
     const [step, setStep] = useState(2); // Always start at Batch
     const [activeStream, setActiveStream] = useState('All');
     const [selectedBatch, setSelectedBatch] = useState(null);
+    const [selectedClassType, setSelectedClassType] = useState('theory'); // 'theory' | 'paper'
     const [selectedPlan, setSelectedPlan] = useState(null);
     const [selectedMonthGroup, setSelectedMonthGroup] = useState(null);
     const [selectedSubjects, setSelectedSubjects] = useState([]);
@@ -109,6 +110,12 @@ const CourseDetailsScreen = ({ route, navigation }) => {
             else courses = Array.isArray(selectedMonthGroup.courses) ? selectedMonthGroup.courses : Object.values(selectedMonthGroup.courses);
         } catch (e) { }
 
+        const targetType = selectedClassType === 'paper' ? 2 : 1;
+        courses = courses.filter(c => {
+            const cType = parseInt(c.courseType || selectedMonthGroup?.classType || 1, 10);
+            return cType === targetType;
+        });
+
         if (isSpecialFlow && activeStream !== 'All') {
             courses = courses.filter(c => {
                 let parsedStreams = [];
@@ -135,7 +142,7 @@ const CourseDetailsScreen = ({ route, navigation }) => {
             }
         }
         return uniqueCourses;
-    }, [selectedMonthGroup, activeStream, isSpecialFlow, groupPaidSubjects, fullPaidSubjects]);
+    }, [selectedMonthGroup, activeStream, isSpecialFlow, selectedClassType, groupPaidSubjects, fullPaidSubjects]);
 
     const toggleSubject = (courseId) => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -220,20 +227,157 @@ const CourseDetailsScreen = ({ route, navigation }) => {
         setStep(newStep);
     };
 
+    const getBatchCourseCounts = (batch) => {
+        let theoryCount = 0;
+        let paperCount = 0;
+        const seenTheory = new Set();
+        const seenPaper = new Set();
+        const groups = Array.isArray(batch?.groups) ? batch.groups : Object.values(batch?.groups || {});
+        groups.forEach(g => {
+            const gClassType = parseInt(g.classType || 1, 10);
+            const courses = Array.isArray(g.courses) ? g.courses : Object.values(g.courses || {});
+            courses.forEach(c => {
+                const cleanName = (c.name || '').trim().toLowerCase();
+                const cType = parseInt(c.courseType || gClassType || 1, 10);
+                if (cType === 2) {
+                    if (!seenPaper.has(cleanName)) {
+                        seenPaper.add(cleanName);
+                        paperCount++;
+                    }
+                } else {
+                    if (!seenTheory.has(cleanName)) {
+                        seenTheory.add(cleanName);
+                        theoryCount++;
+                    }
+                }
+            });
+        });
+        return { theoryCount, paperCount };
+    };
+
+    const isBatchDual = (batch) => {
+        if (!batch) return false;
+        const bType = parseInt(batch.type || 1, 10);
+        const { theoryCount, paperCount } = getBatchCourseCounts(batch);
+        const groups = Array.isArray(batch.groups) ? batch.groups : Object.values(batch.groups || {});
+        const hasPaperGroups = groups.some(g => parseInt(g.classType || 1, 10) === 2);
+        const hasTheoryGroups = groups.some(g => parseInt(g.classType || 1, 10) === 1);
+        return (bType === 3 || bType === 4) || (paperCount > 0 && theoryCount > 0) || (hasPaperGroups && hasTheoryGroups);
+    };
+
+    const handleBatchSelect = (batch) => {
+        setSelectedBatch(batch);
+        const bType = parseInt(batch?.type || 1, 10);
+        const { theoryCount, paperCount } = getBatchCourseCounts(batch);
+        const groups = Array.isArray(batch?.groups) ? batch.groups : Object.values(batch?.groups || {});
+        const hasPaperGroups = groups.some(g => parseInt(g.classType || 1, 10) === 2);
+        const hasTheoryGroups = groups.some(g => parseInt(g.classType || 1, 10) === 1);
+        const hasBoth = (bType === 3 || bType === 4) || (paperCount > 0 && theoryCount > 0) || (hasPaperGroups && hasTheoryGroups);
+
+        if (hasBoth) {
+            changeStep(2.5);
+        } else if (bType === 2 || (paperCount > 0 && theoryCount === 0) || (hasPaperGroups && !hasTheoryGroups)) {
+            setSelectedClassType('paper');
+            proceedToPaymentOrSubjects(batch, 'paper');
+        } else {
+            setSelectedClassType('theory');
+            proceedToPaymentOrSubjects(batch, 'theory');
+        }
+    };
+
+    const proceedToPaymentOrSubjects = (batch, classType) => {
+        const targetType = classType === 'paper' ? 2 : 1;
+        const groups = Array.isArray(batch?.groups) ? batch.groups : Object.values(batch?.groups || {});
+        const availableGroups = groups.filter(g => parseInt(g.classType || 1, 10) === targetType);
+        const hasMonthly = availableGroups.some(g => g.type === 1);
+        const hasFull = availableGroups.some(g => g.type !== 1);
+
+        if (hasMonthly && !hasFull) {
+            setSelectedPlan('monthly');
+            const monthlyGroups = availableGroups.filter(g => g.type === 1).sort((a, b) => (a.itemOrder || 1) - (b.itemOrder || 1));
+            if (monthlyGroups.length === 1) {
+                setSelectedMonthGroup(monthlyGroups[0]);
+                changeStep(5);
+            } else {
+                changeStep(4);
+            }
+        } else if (hasFull && !hasMonthly) {
+            setSelectedPlan('full');
+            const fullGroups = availableGroups.filter(g => g.type !== 1).sort((a, b) => (a.itemOrder || 1) - (b.itemOrder || 1));
+            if (fullGroups.length === 1) {
+                setSelectedMonthGroup(fullGroups[0]);
+                changeStep(5);
+            } else if (fullGroups.length > 1) {
+                changeStep(4);
+            } else {
+                setSelectedMonthGroup(availableGroups[0] || null);
+                changeStep(5);
+            }
+        } else if (hasMonthly && hasFull) {
+            setSelectedPlan(null);
+            setSelectedMonthGroup(null);
+            changeStep(3);
+        } else {
+            setSelectedPlan(null);
+            setSelectedMonthGroup(availableGroups[0] || null);
+            changeStep(5);
+        }
+    };
+
     const handleBack = () => {
         if (step === 1) navigation.goBack();
-        else if (step === 2) { navigation.goBack(); }
-        else if (step === 3) changeStep(2);
-        else if (step === 4) changeStep(3);
+        else if (step === 2) {
+            if (isSpecialFlow && activeStream !== 'All') changeStep(1);
+            else navigation.goBack();
+        }
+        else if (step === 2.5) {
+            changeStep(2);
+            setSelectedBatch(null);
+        }
+        else if (step === 3) {
+            if (isBatchDual(selectedBatch)) changeStep(2.5);
+            else changeStep(2);
+        }
+        else if (step === 4) {
+            const targetType = selectedClassType === 'paper' ? 2 : 1;
+            const streamGroups = safeGroups.filter(g => parseInt(g.classType || 1, 10) === targetType);
+            const hasMonthly = streamGroups.some(g => g.type === 1);
+            const hasFull = streamGroups.some(g => g.type !== 1);
+            if (hasMonthly && hasFull) {
+                changeStep(3);
+            } else if (isBatchDual(selectedBatch)) {
+                changeStep(2.5);
+            } else {
+                changeStep(2);
+            }
+        }
         else if (step === 5) {
-            if (autoSelect) navigation.goBack();
-            else { changeStep(selectedPlan === 'full' ? 3 : 4); setSelectedSubjects([]); }
+            if (autoSelect) {
+                navigation.goBack();
+                return;
+            }
+            setSelectedSubjects([]);
+            const targetType = selectedClassType === 'paper' ? 2 : 1;
+            const streamGroups = safeGroups.filter(g => parseInt(g.classType || 1, 10) === targetType);
+            const hasMonthly = streamGroups.some(g => g.type === 1);
+            const hasFull = streamGroups.some(g => g.type !== 1);
+            const activeGroups = streamGroups.filter(g => selectedPlan === 'monthly' ? g.type === 1 : g.type !== 1);
+            if (activeGroups.length > 1) {
+                changeStep(4);
+            } else if (hasMonthly && hasFull) {
+                changeStep(3);
+            } else if (isBatchDual(selectedBatch)) {
+                changeStep(2.5);
+            } else {
+                changeStep(2);
+            }
         }
     };
 
     const getStepTitle = () => {
         if (step === 1) return "SELECT STREAM";
         if (step === 2) return "SELECT BATCH";
+        if (step === 2.5) return "CLASS STREAM";
         if (step === 3) return "PAYMENT TYPE";
         if (step === 4) return "SELECT MONTH";
         return "SELECT SUBJECTS";
@@ -241,7 +385,8 @@ const CourseDetailsScreen = ({ route, navigation }) => {
 
     const getProgress = () => {
         const totalSteps = 5;
-        return (step / totalSteps) * 100;
+        const currentStepVal = step === 2.5 ? 2.5 : step;
+        return (currentStepVal / totalSteps) * 100;
     };
 
     return (
@@ -298,7 +443,7 @@ const CourseDetailsScreen = ({ route, navigation }) => {
                             batches.map(batch => {
                                 const isSelected = selectedBatch?.id === batch.id;
                                 return (
-                                    <TouchableOpacity activeOpacity={0.8} key={batch.id} style={[styles.modernCard, isSelected && styles.modernCardActive]} onPress={() => { setSelectedBatch(batch); changeStep(3); }}>
+                                    <TouchableOpacity activeOpacity={0.8} key={batch.id} style={[styles.modernCard, isSelected && styles.modernCardActive]} onPress={() => handleBatchSelect(batch)}>
                                         {batch.logo && batch.logo !== 'default.png' ? (
                                             <Image source={{ uri: `${IMAGE_URL}icons/${batch.logo}` }} style={{ width: 70, height: 70, borderRadius: 12, backgroundColor: '#fff', marginRight: 15 }} resizeMode="cover" />
                                         ) : (
@@ -320,20 +465,108 @@ const CourseDetailsScreen = ({ route, navigation }) => {
                     </View>
                 )}
 
+                {step === 2.5 && (() => {
+                    const counts = getBatchCourseCounts(selectedBatch);
+                    return (
+                        <View style={styles.animateFade}>
+                            <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                                <View style={styles.batchBadge}>
+                                    <Text style={styles.batchBadgeText}>{selectedBatch?.name}</Text>
+                                </View>
+                                <Text style={[styles.label, { textAlign: 'center', marginTop: 10, marginBottom: 4 }]}>Select Class Stream</Text>
+                                <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'center' }}>Choose between Theory or Paper classes to continue</Text>
+                            </View>
+
+                            {/* THEORY CLASS CARD */}
+                            <TouchableOpacity 
+                                activeOpacity={0.88} 
+                                onPress={() => {
+                                    setSelectedClassType('theory');
+                                    proceedToPaymentOrSubjects(selectedBatch, 'theory');
+                                }}
+                                style={{ marginBottom: 16 }}
+                            >
+                                <LinearGradient 
+                                    colors={['#1E3A8A', '#2563EB']} 
+                                    start={{x:0, y:0}} 
+                                    end={{x:1, y:1}} 
+                                    style={styles.classStreamCard}
+                                >
+                                    <View style={styles.classStreamIconWrapBlue}>
+                                        <Icon name="book-open-page-variant" size={36} color="#93C5FD" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 14 }}>
+                                        <View style={styles.streamBadgeBlue}>
+                                            <Text style={styles.streamBadgeTextBlue}>{counts.theoryCount} Subjects Available</Text>
+                                        </View>
+                                        <Text style={styles.classStreamTitle}>Theory Class</Text>
+                                        <Text style={styles.classStreamSub}>Structured Theory & Concept Lessons</Text>
+                                        <Text style={styles.classStreamDesc} numberOfLines={2}>
+                                            Comprehensive syllabus coverage, concept clarity, theory notes & foundational learning.
+                                        </Text>
+                                    </View>
+                                    <Icon name="chevron-right" size={26} color="rgba(255,255,255,0.7)" />
+                                </LinearGradient>
+                            </TouchableOpacity>
+
+                            {/* PAPER CLASS CARD */}
+                            <TouchableOpacity 
+                                activeOpacity={0.88} 
+                                onPress={() => {
+                                    setSelectedClassType('paper');
+                                    proceedToPaymentOrSubjects(selectedBatch, 'paper');
+                                }}
+                            >
+                                <LinearGradient 
+                                    colors={['#B45309', '#D97706']} 
+                                    start={{x:0, y:0}} 
+                                    end={{x:1, y:1}} 
+                                    style={styles.classStreamCard}
+                                >
+                                    <View style={styles.classStreamIconWrapAmber}>
+                                        <Icon name="file-document-edit" size={36} color="#FDE68A" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 14 }}>
+                                        <View style={styles.streamBadgeAmber}>
+                                            <Text style={styles.streamBadgeTextAmber}>{counts.paperCount} Subjects Available</Text>
+                                        </View>
+                                        <Text style={styles.classStreamTitle}>Paper Class</Text>
+                                        <Text style={styles.classStreamSub}>Timed Exam Papers & Marking Discussion</Text>
+                                        <Text style={styles.classStreamDesc} numberOfLines={2}>
+                                            Model exam papers, structured past paper discussions, marking schemes & timing coaching.
+                                        </Text>
+                                    </View>
+                                    <Icon name="chevron-right" size={26} color="rgba(255,255,255,0.7)" />
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </View>
+                    );
+                })()}
+
                 {step === 3 && (() => {
-                    const hasFullPayment = safeGroups.some(g => g.type == 2 || String(g.name).toLowerCase().includes('full'));
-                    const hasMonthlyPayment = safeGroups.some(g => g.type == 1);
+                    const targetType = selectedClassType === 'paper' ? 2 : 1;
+                    const streamGroups = safeGroups.filter(g => parseInt(g.classType || 1, 10) === targetType);
+                    const hasFullPayment = streamGroups.some(g => g.type == 2 || String(g.name).toLowerCase().includes('full'));
+                    const hasMonthlyPayment = streamGroups.some(g => g.type == 1);
                     
                     return (
                     <View style={styles.animateFade}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                            <View style={selectedClassType === 'paper' ? styles.streamBadgeAmber : styles.streamBadgeBlue}>
+                                <Text style={selectedClassType === 'paper' ? styles.streamBadgeTextAmber : styles.streamBadgeTextBlue}>
+                                    {selectedClassType === 'paper' ? '📝 Paper Class' : '📘 Theory Class'}
+                                </Text>
+                            </View>
+                        </View>
+
                         <Text style={styles.label}>Payment Plan</Text>
                         
                         {hasFullPayment && (
                         <TouchableOpacity activeOpacity={0.8} onPress={() => {
                             setSelectedPlan('full');
-                            const fullGroups = safeGroups.filter(g => g.type == 2 || String(g.name).toLowerCase().includes('full'));
+                            const fullGroups = streamGroups.filter(g => g.type == 2 || String(g.name).toLowerCase().includes('full'));
                             if (fullGroups.length === 0) {
-                                if (safeGroups.length > 0) { setSelectedMonthGroup(safeGroups[0]); changeStep(5); }
+                                if (streamGroups.length > 0) { setSelectedMonthGroup(streamGroups[0]); changeStep(5); }
                                 else { Alert.alert("Wait", "Subjects not configured yet."); return; }
                             } else if (fullGroups.length === 1) { setSelectedMonthGroup(fullGroups[0]); changeStep(5); }
                             else { changeStep(4); }
@@ -353,7 +586,16 @@ const CourseDetailsScreen = ({ route, navigation }) => {
                         )}
 
                         {hasMonthlyPayment && (
-                        <TouchableOpacity activeOpacity={0.8} onPress={() => { setSelectedPlan('monthly'); changeStep(4); }}>
+                        <TouchableOpacity activeOpacity={0.8} onPress={() => { 
+                            setSelectedPlan('monthly'); 
+                            const monthlyGroups = streamGroups.filter(g => g.type == 1);
+                            if (monthlyGroups.length === 1) {
+                                setSelectedMonthGroup(monthlyGroups[0]);
+                                changeStep(5);
+                            } else {
+                                changeStep(4);
+                            }
+                        }}>
                             <LinearGradient colors={['#424242', '#212121']} start={{x:0, y:0}} end={{x:1, y:1}} style={styles.premiumCard}>
                                 <View style={styles.planIconWrapper}>
                                     <Icon name="calendar-month-outline" size={32} color="#1E3C72" />
@@ -383,26 +625,41 @@ const CourseDetailsScreen = ({ route, navigation }) => {
                     );
                 })()}
 
-                {step === 4 && (
-                    <View style={styles.animateFade}>
-                        <Text style={styles.label}>Select {selectedPlan === 'monthly' ? 'Month' : 'Group'}</Text>
-                        {safeGroups.filter(g => selectedPlan === 'monthly' ? g.type == 1 : g.type != 1).map(group => (
-                            <TouchableOpacity activeOpacity={0.8} key={group.id} style={styles.modernCard} onPress={() => { setSelectedMonthGroup(group); changeStep(5); }}>
-                                <View style={styles.logoContainer}><Icon name="calendar-month" size={24} color={COLORS.primary} /></View>
-                                <Text style={[styles.cardText, {marginLeft: 15, flex: 1}]}>{group.name}</Text>
-                                <Icon name="chevron-right" size={24} color="#ccc" />
-                            </TouchableOpacity>
-                        ))}
-                        {safeGroups.filter(g => selectedPlan === 'monthly' ? g.type == 1 : g.type != 1).length === 0 && <Text style={styles.emptyText}>No plans available.</Text>}
-                    </View>
-                )}
+                {step === 4 && (() => {
+                    const targetType = selectedClassType === 'paper' ? 2 : 1;
+                    const displayGroups = safeGroups.filter(g => {
+                        const matchesClass = parseInt(g.classType || 1, 10) === targetType;
+                        const matchesPlan = selectedPlan === 'monthly' ? g.type == 1 : g.type != 1;
+                        return matchesClass && matchesPlan;
+                    });
+                    return (
+                        <View style={styles.animateFade}>
+                            <Text style={styles.label}>Select {selectedPlan === 'monthly' ? 'Month' : 'Group'}</Text>
+                            {displayGroups.map(group => (
+                                <TouchableOpacity activeOpacity={0.8} key={group.id} style={styles.modernCard} onPress={() => { setSelectedMonthGroup(group); changeStep(5); }}>
+                                    <View style={styles.logoContainer}><Icon name="calendar-month" size={24} color={COLORS.primary} /></View>
+                                    <Text style={[styles.cardText, {marginLeft: 15, flex: 1}]}>{group.name}</Text>
+                                    <Icon name="chevron-right" size={24} color="#ccc" />
+                                </TouchableOpacity>
+                            ))}
+                            {displayGroups.length === 0 && <Text style={styles.emptyText}>No plans available.</Text>}
+                        </View>
+                    );
+                })()}
 
                 {step === 5 && (
                     <View style={styles.animateFade}>
                         {selectedMonthGroup && (
-                            <View style={styles.floatingChip}>
-                                <Icon name="calendar-check" size={18} color="white" style={{ marginRight: 8 }} />
-                                <Text style={styles.floatingChipText}>Paying for: {selectedMonthGroup.name}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 15 }}>
+                                <View style={selectedClassType === 'paper' ? styles.streamBadgeAmber : styles.streamBadgeBlue}>
+                                    <Text style={selectedClassType === 'paper' ? styles.streamBadgeTextAmber : styles.streamBadgeTextBlue}>
+                                        {selectedClassType === 'paper' ? '📝 Paper Class' : '📘 Theory Class'}
+                                    </Text>
+                                </View>
+                                <View style={styles.floatingChip}>
+                                    <Icon name="calendar-check" size={16} color="white" style={{ marginRight: 6 }} />
+                                    <Text style={styles.floatingChipText}>Plan: {selectedMonthGroup.name}</Text>
+                                </View>
                             </View>
                         )}
 
@@ -675,7 +932,21 @@ const styles = StyleSheet.create({
     
     modalBtnOutline: { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC', padding: 18, borderRadius: 24, marginBottom: 15 },
     modalIconBox: { width: 50, height: 50, borderRadius: 16, backgroundColor: '#DBEAFE', justifyContent: 'center', alignItems: 'center' },
-    modalBtnSolid: { padding: 20, borderRadius: 24, elevation: 8, shadowColor: '#1E3A8A', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 8 }
+    modalBtnSolid: { padding: 20, borderRadius: 24, elevation: 8, shadowColor: '#1E3A8A', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 8 },
+
+    // Class Stream Styles (Theory vs Paper)
+    batchBadge: { backgroundColor: '#F1F5F9', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#CBD5E1' },
+    batchBadgeText: { fontSize: 12, fontWeight: '900', color: COLORS.primary, textTransform: 'uppercase', letterSpacing: 0.8 },
+    classStreamCard: { borderRadius: 24, padding: 20, flexDirection: 'row', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
+    classStreamIconWrapBlue: { width: 64, height: 64, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
+    classStreamIconWrapAmber: { width: 64, height: 64, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
+    streamBadgeBlue: { backgroundColor: 'rgba(59, 130, 246, 0.25)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: 'rgba(147, 197, 253, 0.4)' },
+    streamBadgeAmber: { backgroundColor: 'rgba(245, 158, 11, 0.25)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: 'rgba(253, 230, 138, 0.4)' },
+    streamBadgeTextBlue: { color: '#DBEAFE', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 },
+    streamBadgeTextAmber: { color: '#FEF3C7', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 },
+    classStreamTitle: { color: 'white', fontSize: 20, fontWeight: '900', marginBottom: 2 },
+    classStreamSub: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '700', marginBottom: 4 },
+    classStreamDesc: { color: 'rgba(255,255,255,0.7)', fontSize: 11, lineHeight: 15, fontWeight: '500' },
 });
 
 export default CourseDetailsScreen;

@@ -108,10 +108,6 @@ const LoginScreen = ({ navigation }) => {
             <TouchableOpacity onPress={() => navigation.navigate('Register')}>
               <Text style={styles.footerText}>Don't have an account? <Text style={{fontWeight:'bold', color: COLORS.primary}}>Register</Text></Text>
             </TouchableOpacity>
-
-            <TouchableOpacity onPress={() => navigation.navigate('YTPlayerTest')} style={{ marginTop: 18, alignItems: 'center', paddingVertical: 6 }}>
-              <Text style={{ fontSize: 13, color: '#888', fontWeight: '600' }}>🎬 Test YouTube Player (Lab)</Text>
-            </TouchableOpacity>
           </View>
         </ScrollView>
       </ImageBackground>
