@@ -1,1 +1,1 @@
-export { default, parseYouTube } from "./src/components/YouTubePlayer";
+export { default, parseYouTube } from "../src/components/YouTubePlayer";
