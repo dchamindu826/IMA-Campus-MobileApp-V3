@@ -15,7 +15,6 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import YouTubePlayer, { parseYouTube as parseYouTubeUrl } from '../components/YouTubePlayer';
-import YoutubePlayer from 'react-native-youtube-iframe';
 import COLORS from '../constants/colors';
 
 const SAMPLE_VIDEOS = [

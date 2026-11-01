@@ -642,9 +642,9 @@ const CourseContentScreen = ({ route, navigation }) => {
                     )}
 
                     {playingItem?.isYouTube ? (
-                        <View style={isYtFullscreen ? StyleSheet.absoluteFillObject : { width: width, aspectRatio: 16 / 9, alignSelf: 'center', backgroundColor: '#000' }}>
+                        <View style={isYtFullscreen ? StyleSheet.absoluteFillObject : { width: width, height: Math.round((width * 9) / 16), alignSelf: 'center', backgroundColor: '#000' }}>
                             <YouTubePlayer
-                                key={String(playingItem.id || playingItem.ytId)}
+                                key={String(playingItem.id || playingItem.ytId || playingItem.link)}
                                 url={playingItem.link || playingItem.youtubeLink}
                                 videoId={playingItem.ytId}
                                 autoPlay={true}

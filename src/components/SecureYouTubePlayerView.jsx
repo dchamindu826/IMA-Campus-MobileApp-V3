@@ -1,5 +1,4 @@
-import YouTubePlayer, { parseYouTube, parseYouTubeUrl } from './YouTubePlayer';
+import YouTubePlayer, { parseYouTube, parseYouTubeUrl, generatePlayerHtml } from './YouTubePlayer';
 
-export const generatePlayerHtml = () => '';
-export { parseYouTube, parseYouTubeUrl };
+export { parseYouTube, parseYouTubeUrl, generatePlayerHtml };
 export default YouTubePlayer;
