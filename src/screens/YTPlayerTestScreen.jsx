@@ -103,12 +103,43 @@ export default function YTPlayerTestScreen({ navigation }) {
               onChangeText={setInputUrl}
               autoCapitalize="none"
               autoCorrect={false}
+              selectTextOnFocus={true}
+              clearButtonMode="while-editing"
             />
             {inputUrl.length > 0 && (
               <TouchableOpacity onPress={() => setInputUrl('')} style={styles.clearBtn}>
                 <Icon name="close-circle" size={20} color="#94a3b8" />
               </TouchableOpacity>
             )}
+          </View>
+
+          {/* Quick Paste Shortcuts */}
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+            <TouchableOpacity
+              style={[styles.chip, { flex: 1, justifyContent: 'center' }]}
+              onPress={() => {
+                const url = 'https://youtube.com/live/UloSAi-MgPY?feature=share';
+                setInputUrl(url);
+                setActiveUrl(url);
+                addLog('select', 'Pasted IMA Lesson Link');
+              }}
+            >
+              <Icon name="clipboard-arrow-down-outline" size={16} color="#ef4444" />
+              <Text style={styles.chipText}>Paste IMA Lesson</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.chip, { flex: 1, justifyContent: 'center' }]}
+              onPress={() => {
+                const url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+                setInputUrl(url);
+                setActiveUrl(url);
+                addLog('select', 'Pasted Working Biology Sample');
+              }}
+            >
+              <Icon name="play-circle-outline" size={16} color="#10b981" />
+              <Text style={[styles.chipText, { color: '#10b981' }]}>Working Video</Text>
+            </TouchableOpacity>
           </View>
 
           <TouchableOpacity onPress={handleLoad} style={styles.loadBtn}>
