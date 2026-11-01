@@ -448,27 +448,33 @@ export default function YouTubePlayer({
     );
   }
 
-  const html = generatePlayerHtml(videoId, listId, autoPlay);
+  const embedUrl = listId
+    ? `https://www.youtube.com/embed?listType=playlist&list=${listId}&autoplay=1&playsinline=1`
+    : `https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1`;
 
   return (
     <View
       style={[
         fullscreen
           ? StyleSheet.absoluteFillObject
-          : {
-              width: '100%',
-              height: '100%',
-              minHeight: defaultHeight,
-              backgroundColor: '#000000',
-              overflow: 'hidden',
-            },
-        style,
+          : [
+              {
+                width: '100%',
+                height: defaultHeight,
+                backgroundColor: '#000000',
+                overflow: 'hidden',
+              },
+              style,
+            ],
       ]}
     >
       <StatusBar hidden={fullscreen} />
       <WebView
         ref={webViewRef}
-        source={{ html, baseUrl: 'https://imacampus.lk' }}
+        source={{
+          uri: embedUrl,
+          headers: { Referer: 'https://imacampus.lk' },
+        }}
         style={styles.web}
         containerStyle={styles.webContainer}
         originWhitelist={['*']}
@@ -476,7 +482,7 @@ export default function YouTubePlayer({
         domStorageEnabled={true}
         allowsInlineMediaPlayback={true}
         mediaPlaybackRequiresUserAction={false}
-        allowsFullscreenVideo={false}
+        allowsFullscreenVideo={true}
         scrollEnabled={false}
         bounces={false}
         overScrollMode="never"
