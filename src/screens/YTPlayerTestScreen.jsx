@@ -74,6 +74,7 @@ export default function YTPlayerTestScreen({ navigation }) {
       <View style={{ paddingHorizontal: 16, paddingTop: 10 }}>
         <View style={styles.playerCard}>
           <YouTubePlayer
+            key={activeUrl}
             url={activeUrl}
             autoPlay={true}
             onStatus={(status, data) => addLog(status, typeof data === 'object' ? (data.message || status) : String(data))}

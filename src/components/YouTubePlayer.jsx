@@ -6,6 +6,7 @@ import {
   Platform,
   BackHandler,
   StatusBar,
+  Linking,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
@@ -79,6 +80,12 @@ export function generatePlayerHtml(videoId, listId, autoPlay = true) {
     .chip { padding: 4px 8px; background: #27272a; color: #e5e7eb; border: 0; border-radius: 6px; font-size: 12px; cursor: pointer; }
     .chip.active { background: #ef4444; color: #fff; font-weight: 700; }
     .badge { font-size: 9px; background: #ef4444; color: #fff; padding: 1px 3px; border-radius: 3px; margin-left: 2px; }
+    .err-box { position: absolute; inset: 0; z-index: 25; background: rgba(15,23,42,0.96); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; color: #fff; }
+    .err-box.hidden { display: none; }
+    .err-icon { font-size: 32px; margin-bottom: 8px; }
+    .err-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; color: #f87171; }
+    .err-desc { font-size: 12px; color: #cbd5e1; max-width: 280px; margin-bottom: 14px; line-height: 1.4; }
+    .err-btn { background: #ef4444; color: #fff; border: 0; padding: 9px 18px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -86,6 +93,12 @@ export function generatePlayerHtml(videoId, listId, autoPlay = true) {
     <div class="yt-frame"><div id="player"></div></div>
     <div class="cover" id="cover">
       <div class="big-btn"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+    </div>
+    <div class="err-box hidden" id="errBox">
+      <div class="err-icon">⚠️</div>
+      <div class="err-title">Video Unavailable</div>
+      <div class="err-desc" id="errMsg">This video is private, restricted, or embedding is disabled by YouTube.</div>
+      <button class="err-btn" id="btnOpenYt">Open in YouTube</button>
     </div>
     <div class="shield" id="shield"></div>
     <div class="flash flash-left" id="flashL"><span>−10s</span></div>
@@ -195,9 +208,23 @@ export function generatePlayerHtml(videoId, listId, autoPlay = true) {
             else if (e.data === S.ENDED) post({ type: 'status', status: 'ended', message: 'Ended' });
           },
           onError: function(e) {
-            var errMap = { 2: 'Invalid Video ID', 5: 'HTML5 Error', 100: 'Video not found/private', 101: 'Embedding disabled by owner', 150: 'Embedding disabled by owner' };
+            var errMap = {
+              2: 'Invalid Video ID',
+              5: 'HTML5 Error',
+              100: 'Video not found or private',
+              101: 'Embedding is restricted or blocked by YouTube',
+              150: 'Embedding is restricted or blocked by YouTube',
+              153: 'Referrer or configuration error'
+            };
             var msg = errMap[e.data] || ('YouTube Error ' + e.data);
             post({ type: 'status', status: 'error', message: msg, code: e.data });
+            var eb = document.getElementById('errBox');
+            if (eb) {
+              eb.classList.remove('hidden');
+              document.getElementById('errMsg').innerText = msg + ' (Error ' + e.data + ').';
+            }
+            var cov = document.getElementById('cover');
+            if (cov) cov.classList.add('hidden');
           }
         }
       });
@@ -282,6 +309,13 @@ export function generatePlayerHtml(videoId, listId, autoPlay = true) {
     document.getElementById('btnBack').onclick = function() { seekDelta(-10); };
     document.getElementById('btnFwd').onclick = function() { seekDelta(10); };
     document.getElementById('btnFs').onclick = function() { post({ type: 'fullscreen' }); };
+    var btnYt = document.getElementById('btnOpenYt');
+    if (btnYt) {
+      btnYt.onclick = function() {
+        var ytUrl = '${videoId ? `https://www.youtube.com/watch?v=${videoId}` : (listId ? `https://www.youtube.com/playlist?list=${listId}` : '')}';
+        post({ type: 'openExternal', url: ytUrl });
+      };
+    }
 
     document.getElementById('btnMute').onclick = function() {
       if (!player) return;
@@ -432,6 +466,10 @@ export default function YouTubePlayer({
         toggleFullscreen();
       } else if (data.type === 'status') {
         if (onStatusChange) onStatusChange(data);
+      } else if (data.type === 'openExternal' && data.url) {
+        Linking.openURL(data.url).catch((err) => {
+          console.warn('[YouTubePlayer] Failed to open external URL:', err);
+        });
       }
     } catch (_) {}
   };
@@ -448,9 +486,7 @@ export default function YouTubePlayer({
     );
   }
 
-  const embedUrl = listId
-    ? `https://www.youtube.com/embed?listType=playlist&list=${listId}&autoplay=1&playsinline=1`
-    : `https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1`;
+  const html = generatePlayerHtml(videoId, listId, autoPlay);
 
   return (
     <View
@@ -471,10 +507,7 @@ export default function YouTubePlayer({
       <StatusBar hidden={fullscreen} />
       <WebView
         ref={webViewRef}
-        source={{
-          uri: embedUrl,
-          headers: { Referer: 'https://imacampus.lk' },
-        }}
+        source={{ html, baseUrl: 'https://imacampus.lk' }}
         style={styles.web}
         containerStyle={styles.webContainer}
         originWhitelist={['*']}
@@ -482,7 +515,7 @@ export default function YouTubePlayer({
         domStorageEnabled={true}
         allowsInlineMediaPlayback={true}
         mediaPlaybackRequiresUserAction={false}
-        allowsFullscreenVideo={true}
+        allowsFullscreenVideo={false}
         scrollEnabled={false}
         bounces={false}
         overScrollMode="never"
