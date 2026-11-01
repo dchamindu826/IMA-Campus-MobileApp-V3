@@ -36,6 +36,7 @@ import DeliveryScreen from './src/screens/DeliveryScreen';
 import MCQPaperScreen from './src/screens/MCQPaperScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import YTPlayerTestScreen from './src/screens/YTPlayerTestScreen';
+import YTDebugScreen from './src/screens/YTDebugScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -150,6 +151,7 @@ const AppNavigation = () => {
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
             <Stack.Screen name="YTPlayerTest" component={YTPlayerTestScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="YTDebug" component={YTDebugScreen} options={{ headerShown: false }} />
           </>
         ) : (
           <>
@@ -178,6 +180,7 @@ const AppNavigation = () => {
             <Stack.Screen name="MCQPaper" component={MCQPaperScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Leaderboard" component={LeaderboardScreen} options={{ headerShown: false }} />
             <Stack.Screen name="YTPlayerTest" component={YTPlayerTestScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="YTDebug" component={YTDebugScreen} options={{ headerShown: false }} />
           </>
         )}
       </Stack.Navigator>

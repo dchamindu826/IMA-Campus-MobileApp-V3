@@ -1,15 +1,26 @@
 import React, { useState } from 'react';
-import { ScrollView, View, Text, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { WebView } from 'react-native-webview';
 import YouTubePlayer from '../components/YouTubePlayer';
 
-export default function YTDebugScreen() {
+export default function YTDebugScreen({ navigation }) {
   const [logs, setLogs] = useState([]);
   const add = (m) =>
     setLogs((l) => [`${new Date().toLocaleTimeString()}  ${m}`, ...l].slice(0, 40));
 
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.body}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+        <TouchableOpacity
+          onPress={() => navigation && navigation.goBack && navigation.goBack()}
+          style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#222', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}
+        >
+          <Icon name="arrow-left" size={22} color="#fff" />
+        </TouchableOpacity>
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>YT Diagnostic Lab</Text>
+      </View>
+
       <Text style={s.h}>1. Red box (RN layout)</Text>
       <View style={{ height: 40, backgroundColor: 'red' }} />
 

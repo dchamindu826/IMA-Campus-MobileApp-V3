@@ -433,7 +433,9 @@ const HomeScreen = ({ navigation }) => {
                   navigation.navigate('Delivery');
                 } else if (item.targetTab === 'Leaderboard') {
                   navigation.navigate('Leaderboard');
-                } else if (item.targetTab === 'YTPlayerTest' || item.targetTab === 'YTDebug') {
+                } else if (item.targetTab === 'YTPlayerTest') {
+                  navigation.navigate('YTPlayerTest');
+                } else if (item.targetTab === 'YTDebug') {
                   navigation.navigate('YTDebug');
                 } else if (item.targetTab) {
                   navigation.navigate('MainTabs', { screen: item.targetTab });
