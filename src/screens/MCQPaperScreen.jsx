@@ -255,7 +255,7 @@ const MCQPaperScreen = ({ route, navigation }) => {
     }
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <View style={[styles.container, { paddingTop: Math.max(insets.top, 20) + 8, paddingBottom: insets.bottom }]}>
             <StatusBar barStyle="light-content" backgroundColor="#0a0f1d" />
 
             {/* 🌟 TOP HEADER 🌟 */}

@@ -4,7 +4,7 @@ require File.join(File.dirname(`node --print "require.resolve('react-native/pack
 require 'json'
 podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties.json'))) rescue {}
 
-ENV['RCT_NEW_ARCH_ENABLED'] = podfile_properties['newArchEnabled'] == 'true' ? '1' : '0'
+ENV['RCT_NEW_ARCH_ENABLED'] = '1'
 ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] = podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
 
 use_autolinking_method_symbol = ('use' + '_native' + '_modules!').to_sym
@@ -28,7 +28,7 @@ self.define_singleton_method(use_autolinking_method_symbol) do |*args|
   end
 end
 
-platform :ios, podfile_properties['ios.deploymentTarget'] || '13.4'
+platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
 install! 'cocoapods',
   :deterministic_uuids => false
 
@@ -73,18 +73,55 @@ target 'IMACampus' do
       end
     end
 
-    # Set minimum deployment target to 15.1 for modern Xcode / Simulator compatibility
+    # Set minimum deployment target, disable script sandboxing, and configure fmt
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
+        config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+        if target.name == 'fmt'
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+        end
         if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 15.1
           config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
         end
       end
     end
 
-    # Remove duplicate Assets.car from [CP] Copy Pods Resources to fix Xcode 15 build error
+    # Fix fmt consteval error in Xcode 16 / Apple Clang
+    fmt_base = File.join(installer.sandbox.root, 'fmt', 'include', 'fmt', 'base.h')
+    if File.exist?(fmt_base)
+      content = File.read(fmt_base)
+      if content.include?('__apple_build_version__ < 14000029L')
+        content = content.gsub('__apple_build_version__ < 14000029L', 'defined(__apple_build_version__)')
+        File.chmod(0644, fmt_base)
+        File.write(fmt_base, content)
+      end
+    end
+
+    # Fix react-native-prevent-screenshot-ios-android header in New Architecture
+    screenshot_h = File.join(installer.sandbox.root, '../node_modules/react-native-prevent-screenshot-ios-android/ios/PreventScreenshotIosAndroid.h')
+    if File.exist?(screenshot_h)
+      content = File.read(screenshot_h)
+      if content.include?('RNPreventScreenshotIosAndroidSpec.h')
+        patched = content.gsub(/#ifdef RCT_NEW_ARCH_ENABLED[\s\S]*?#else\n/, '').gsub(/#endif\n/, '')
+        File.chmod(0644, screenshot_h)
+        File.write(screenshot_h, patched)
+      end
+    end
+
+    # Disable script sandboxing in Pods project configurations
+    installer.pods_project.build_configurations.each do |config|
+      config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+    end
+
+    # Remove duplicate Assets.car and disable script sandboxing in user project
     installer.aggregate_targets.each do |target|
+      target.user_project.build_configurations.each do |config|
+        config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+      end
       target.user_project.targets.each do |user_target|
+        user_target.build_configurations.each do |config|
+          config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+        end
         user_target.build_phases.each do |phase|
           if phase.respond_to?(:output_paths) && phase.output_paths
             phase.output_paths.delete_if { |path| path.include?('Assets.car') }

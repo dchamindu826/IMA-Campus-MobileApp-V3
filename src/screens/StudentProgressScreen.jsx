@@ -8,15 +8,17 @@ import {
   ActivityIndicator,
   Dimensions,
   RefreshControl,
-  SafeAreaView,
+  Platform,
   StatusBar
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
 
 const { width } = Dimensions.get('window');
 
 export default function StudentProgressScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeCategory, setActiveCategory] = useState('WEEKLY'); // 'WEEKLY' | 'MONTHLY'
@@ -74,11 +76,11 @@ export default function StudentProgressScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0a0f1d" />
 
       {/* Top Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
         <TouchableOpacity 
           style={styles.backButton} 
           onPress={() => navigation.goBack()}
@@ -310,7 +312,7 @@ export default function StudentProgressScreen({ navigation }) {
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -393,7 +393,7 @@ const CourseDetailsScreen = ({ route, navigation }) => {
         <View style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
 
-            <LinearGradient colors={[COLORS.primary, '#9A0007']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
+            <LinearGradient colors={[COLORS.primary, '#9A0007']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.headerGradient, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
                 <View style={styles.headerTopRow}>
                     <TouchableOpacity activeOpacity={0.8} onPress={handleBack} style={styles.backBtn}>
                         <Icon name="arrow-left" size={24} color="white" />
@@ -834,13 +834,11 @@ const CourseDetailsScreen = ({ route, navigation }) => {
     );
 };
 
-const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 50 : StatusBar.currentHeight || 24;
-
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8FAFC' },
     
     // Header Styles
-    headerGradient: { paddingHorizontal: 20, paddingBottom: 25, paddingTop: STATUSBAR_HEIGHT + 15, borderBottomLeftRadius: 35, borderBottomRightRadius: 35, elevation: 10, overflow: 'hidden' },
+    headerGradient: { paddingHorizontal: 20, paddingBottom: 22, borderBottomLeftRadius: 35, borderBottomRightRadius: 35, elevation: 10, overflow: 'hidden' },
     headerTopRow: { flexDirection: 'row', alignItems: 'center', zIndex: 2 },
     backBtn: { marginRight: 15, width: 40, height: 40, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
     headerCourseName: { fontSize: 22, fontWeight: '900', color: 'white', letterSpacing: 0.5 },

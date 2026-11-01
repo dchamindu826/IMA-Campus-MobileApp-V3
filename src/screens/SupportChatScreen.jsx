@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput,
-  KeyboardAvoidingView, Platform, Image, ActivityIndicator, Linking, SafeAreaView
+  KeyboardAvoidingView, Platform, Image, ActivityIndicator, Linking
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as ImagePicker from 'react-native-image-picker';
 import { io } from 'socket.io-client';
@@ -14,6 +15,7 @@ import { AuthContext } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 
 const SupportChatScreen = ({ navigation, route }) => {
+  const insets = useSafeAreaInsets();
   const { userToken, userInfo } = useContext(AuthContext);
   
   const [businesses, setBusinesses] = useState([]);
@@ -253,9 +255,9 @@ const SupportChatScreen = ({ navigation, route }) => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => inquiry ? setInquiry(null) : navigation.goBack()}>
           <Icon name="arrow-left" size={24} color="white" />
         </TouchableOpacity>
@@ -346,7 +348,7 @@ const SupportChatScreen = ({ navigation, route }) => {
           )}
         </KeyboardAvoidingView>
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

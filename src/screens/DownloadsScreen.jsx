@@ -99,7 +99,7 @@ const DownloadsScreen = ({ navigation }) => {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
       <CustomAlert isVisible={alertVisible} title={alertConfig.title} message={alertConfig.msg} type={alertConfig.type} onClose={itemToDelete ? handleDelete : () => setAlertVisible(false)} />
       
-      <LinearGradient colors={[COLORS.primary, '#9B1B1B']} style={[styles.redHeader, { paddingTop: insets.top + 15 }]}>
+      <LinearGradient colors={[COLORS.primary, '#9B1B1B']} style={[styles.redHeader, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Icon name="arrow-left" size={24} color="white" />
@@ -201,7 +201,7 @@ const DownloadsScreen = ({ navigation }) => {
 
       <Modal visible={!!selectedVideo} animationType="slide" onRequestClose={() => setSelectedVideo(null)}>
         <View style={styles.playerWrapper}>
-            <View style={[styles.playerHeader, { paddingTop: insets.top + 15 }]}>
+            <View style={[styles.playerHeader, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
                 <TouchableOpacity style={styles.closePlayerBtn} onPress={() => setSelectedVideo(null)}>
                     <Icon name="chevron-down" size={30} color="white" />
                 </TouchableOpacity>

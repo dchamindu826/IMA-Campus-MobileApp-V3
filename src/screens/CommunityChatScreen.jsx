@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Keyboard
 import { AuthContext } from '../context/AuthContext';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import io from 'socket.io-client';
 import api from '../services/api';
 import COLORS from '../constants/colors';
@@ -12,6 +13,7 @@ const DP_IMAGES = Array.from({ length: 20 }, (_, i) => `${(i + 1).toString().pad
 const REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
 const CommunityChatScreen = ({ route, navigation }) => {
+    const insets = useSafeAreaInsets();
     const { businessId, businessName } = route.params || {};
     const { userInfo, userToken } = useContext(AuthContext);
 
@@ -402,7 +404,7 @@ const CommunityChatScreen = ({ route, navigation }) => {
     return (
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
             {/* Header Revamp */}
-            <LinearGradient colors={['#9B1B1B', COLORS.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.header}>
+            <LinearGradient colors={['#9B1B1B', COLORS.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 10 }}>
                     <Icon name="arrow-left" size={24} color="white" />
                 </TouchableOpacity>
@@ -549,7 +551,7 @@ const CommunityChatScreen = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#E5DDD5' }, // WhatsApp-like bg
-    header: { flexDirection: 'row', alignItems: 'center', paddingTop: 40, paddingBottom: 10, paddingHorizontal: 5, elevation: 5 },
+    header: { flexDirection: 'row', alignItems: 'center', paddingBottom: 10, paddingHorizontal: 5, elevation: 5 },
     headerTitle: { color: 'white', fontSize: 18, fontWeight: 'bold' },
     onlineCountText: { color: '#E0F2F1', fontSize: 12, marginTop: 2 },
 

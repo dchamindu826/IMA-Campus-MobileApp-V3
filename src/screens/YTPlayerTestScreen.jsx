@@ -9,23 +9,25 @@ import {
   StatusBar,
   FlatList,
   Alert,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import SecureYouTubePlayerView, { parseYouTubeUrl } from '../components/SecureYouTubePlayerView';
+import YouTubePlayer, { parseYouTube as parseYouTubeUrl } from '../components/YouTubePlayer';
+import YoutubePlayer from 'react-native-youtube-iframe';
 import COLORS from '../constants/colors';
 
 const SAMPLE_VIDEOS = [
-  { id: '1', title: 'Sample Lesson', url: 'https://www.youtube.com/watch?v=kYJ_t7b4w_U', desc: 'YouTube standard video' },
+  { id: '1', title: 'IMA Media Lesson', url: 'https://youtube.com/live/UloSAi-MgPY', desc: 'Real IMA Campus Recording' },
   { id: '2', title: 'Biology Lecture', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', desc: 'Standard 1080p stream' },
-  { id: '3', title: 'Physics Playlist', url: 'https://www.youtube.com/playlist?list=PLOfumqay9m8j57AKqVnDdTDuQzknco1kQ', desc: 'Full Course Playlist' },
+  { id: '3', title: 'Activity 04', url: 'https://www.youtube.com/watch?v=T-o4OdAdueA', desc: 'LMS Recording Video' },
 ];
 
 export default function YTPlayerTestScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const [inputUrl, setInputUrl] = useState('https://www.youtube.com/watch?v=kYJ_t7b4w_U');
-  const [activeUrl, setActiveUrl] = useState('https://www.youtube.com/watch?v=kYJ_t7b4w_U');
+  const [inputUrl, setInputUrl] = useState('https://youtube.com/live/UloSAi-MgPY');
+  const [activeUrl, setActiveUrl] = useState('https://youtube.com/live/UloSAi-MgPY');
   const [logs, setLogs] = useState([]);
   const [currentStatus, setCurrentStatus] = useState('Idle');
 
@@ -52,7 +54,7 @@ export default function YTPlayerTestScreen({ navigation }) {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
       <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
 
       {/* Header */}
@@ -69,14 +71,24 @@ export default function YTPlayerTestScreen({ navigation }) {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        {/* Video Player Card */}
+      {/* Pinned Video Player Card at the Top */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 10 }}>
         <View style={styles.playerCard}>
-          <SecureYouTubePlayerView
+          <YouTubePlayer
             url={activeUrl}
             autoPlay={true}
+            onStatus={(status, data) => addLog(status, typeof data === 'object' ? (data.message || status) : String(data))}
             onStatusChange={(data) => addLog(data.status, data.message)}
           />
+        </View>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        {/* Top Status & Recent Logs */}
+        <View style={[styles.card, { padding: 10, marginBottom: 12 }]}>
+          <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '700' }}>
+            STATUS: {currentStatus} | LOGS ({logs.length}): {logs[0] ? `${logs[0].type}: ${logs[0].message}` : 'None'}
+          </Text>
         </View>
 
         {/* URL Input Box */}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ScrollView, Modal, ActivityIndicator, Alert, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ScrollView, Modal, ActivityIndicator, Alert, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { WebView } from 'react-native-webview';
 import moment from 'moment';
@@ -11,6 +12,7 @@ import CustomAlert from '../components/CustomAlert';
 const COURIER_URL = "https://www.fdedomestic.com/";
 
 const DeliveryScreen = ({ navigation }) => {
+    const insets = useSafeAreaInsets();
     const [deliveries, setDeliveries] = useState([]);
     const [loading, setLoading] = useState(true);
     const [trackingModalOpen, setTrackingModalOpen] = useState(false);
@@ -232,11 +234,11 @@ const DeliveryScreen = ({ navigation }) => {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
             <CustomAlert isVisible={alertVisible} title={alertConfig.title} message={alertConfig.msg} type={alertConfig.type} onClose={() => setAlertVisible(false)} />
             
             {/* Header */}
-            <View style={styles.header}>
+            <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 5, marginRight: 15 }}>
                     <Icon name="arrow-left" size={28} color="white" />
                 </TouchableOpacity>
@@ -273,7 +275,7 @@ const DeliveryScreen = ({ navigation }) => {
 
             {/* Tracking Modal */}
             <Modal visible={trackingModalOpen} animationType="slide" onRequestClose={() => setTrackingModalOpen(false)}>
-                <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+                <View style={{ flex: 1, backgroundColor: '#F8FAFC', paddingTop: Math.max(insets.top, 20) + 8 }}>
                     <View style={styles.modalHeader}>
                         <TouchableOpacity onPress={() => setTrackingModalOpen(false)} style={{ padding: 5 }}>
                             <Icon name="close" size={24} color="#1E293B" />
@@ -288,9 +290,9 @@ const DeliveryScreen = ({ navigation }) => {
                         startInLoadingState={true}
                         renderLoading={() => <ActivityIndicator size="large" color={COLORS.primary} style={styles.webviewLoader} />}
                     />
-                </SafeAreaView>
+                </View>
             </Modal>
-        </SafeAreaView>
+        </View>
     );
 };
 

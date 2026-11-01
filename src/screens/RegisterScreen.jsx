@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker'; // 🔥 NEW: Dropdown eka ganna damma
 import COLORS from '../constants/colors';
 import api from '../services/api';
@@ -20,6 +21,7 @@ const PasswordRequirement = ({ met, text }) => (
 const districtsList = ["Ampara", "Anuradhapura", "Badulla", "Batticaloa", "Colombo", "Galle", "Gampaha", "Hambantota", "Jaffna", "Kalutara", "Kandy", "Kegalle", "Kilinochchi", "Kurunegala", "Mannar", "Matale", "Matara", "Monaragala", "Mullaitivu", "Nuwara Eliya", "Polonnaruwa", "Puttalam", "Ratnapura", "Trincomalee", "Vavuniya"];
 
 const RegisterScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   // 🔥 UPDATED: confirmPassword add kara
   const [formData, setFormData] = useState({
     fName: '', lName: '', phone: '', directPhone: '', nic: '',
@@ -156,8 +158,8 @@ const RegisterScreen = ({ navigation }) => {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: 'white' }}>
       <CustomAlert isVisible={alertVisible} title={alertConfig.title} message={alertConfig.msg} type={alertConfig.type} onClose={() => setAlertVisible(false)} />
-      <ScrollView contentContainerStyle={{ paddingBottom: 40, paddingTop: Platform.OS === 'ios' ? 40 : 0 }}>
-        <View style={styles.header}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} bounces={false}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 10, paddingBottom: 25, height: undefined }]}>
           <Image source={require('../assets/logo_white.png')} style={styles.logo} resizeMode="contain" />
         </View>
         <View style={styles.form}>

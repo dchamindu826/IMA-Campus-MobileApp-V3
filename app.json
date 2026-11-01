@@ -3,7 +3,7 @@
     "name": "IMA Campus",
     "slug": "imaacademyapp",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./src/assets/logo.png",
     "userInterfaceStyle": "light",
     "splash": {
@@ -21,7 +21,28 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "The app accesses your photos to upload profile pictures.",
         "NSCameraUsageDescription": "The app accesses your camera to take profile pictures.",
-        "NSMicrophoneUsageDescription": "The app accesses your microphone for video."
+        "NSMicrophoneUsageDescription": "The app accesses your microphone for video.",
+        "UIAppFonts": [
+          "AntDesign.ttf",
+          "Entypo.ttf",
+          "EvilIcons.ttf",
+          "Feather.ttf",
+          "FontAwesome.ttf",
+          "FontAwesome5_Brands.ttf",
+          "FontAwesome5_Regular.ttf",
+          "FontAwesome5_Solid.ttf",
+          "FontAwesome6_Brands.ttf",
+          "FontAwesome6_Regular.ttf",
+          "FontAwesome6_Solid.ttf",
+          "Fontisto.ttf",
+          "Foundation.ttf",
+          "Ionicons.ttf",
+          "MaterialCommunityIcons.ttf",
+          "MaterialIcons.ttf",
+          "Octicons.ttf",
+          "SimpleLineIcons.ttf",
+          "Zocial.ttf"
+        ]
       },
       "googleServicesFile": "./GoogleService-Info.plist"
     },

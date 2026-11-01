@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { 
   View, Text, StyleSheet, FlatList, TouchableOpacity, 
-  Image, ActivityIndicator, SafeAreaView 
+  Image, ActivityIndicator, Platform 
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api, { IMAGE_URL } from '../services/api';
 import COLORS from '../constants/colors';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const ClassRoomScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const [mySubjects, setMySubjects] = useState([]); // Changed to mySubjects
   const [loading, setLoading] = useState(true);
 
@@ -79,8 +81,8 @@ const ClassRoomScreen = ({ navigation }) => {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
         <Text style={styles.headerTitle}>My Classroom</Text>
         <TouchableOpacity onPress={fetchMyClassroom}>
           <Icon name="refresh" size={24} color={COLORS.primary} />
@@ -100,7 +102,7 @@ const ClassRoomScreen = ({ navigation }) => {
           }
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -110,8 +112,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     alignItems: 'center', 
-    padding: 20, 
-    marginTop: 20 
+    paddingHorizontal: 20,
+    paddingBottom: 15,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE'
   },
   headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#333' },
   listContainer: { paddingHorizontal: 20, paddingBottom: 20 },

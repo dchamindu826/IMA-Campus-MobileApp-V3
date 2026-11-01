@@ -1,31 +1,39 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import Modal from 'react-native-modal';
+import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const CustomAlert = ({ isVisible, title, message, type, onClose }) => {
+  if (!isVisible) return null;
+
   const isSuccess = type === 'success';
-  const themeColor = isSuccess ? '#4CAF50' : '#D32F2F'; //
+  const themeColor = isSuccess ? '#4CAF50' : '#D32F2F';
 
   return (
-    <Modal isVisible={isVisible} animationIn="zoomIn" animationOut="zoomOut" backdropOpacity={0.4}>
-      <View style={styles.container}>
-        {/* Taller and colorful header */}
-        <View style={[styles.header, { backgroundColor: themeColor }]}>
-          <Icon name={isSuccess ? 'check-circle' : 'alert-circle'} size={70} color="white" />
-        </View>
-        
-        <View style={styles.content}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
+    <Modal
+      visible={!!isVisible}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.container}>
+          {/* Taller and colorful header */}
+          <View style={[styles.header, { backgroundColor: themeColor }]}>
+            <Icon name={isSuccess ? 'check-circle' : 'alert-circle'} size={70} color="white" />
+          </View>
           
-          <TouchableOpacity 
-            style={[styles.btn, { backgroundColor: themeColor }]} 
-            onPress={onClose}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.btnText}>CONTINUE</Text>
-          </TouchableOpacity>
+          <View style={styles.content}>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.message}>{message}</Text>
+            
+            <TouchableOpacity 
+              style={[styles.btn, { backgroundColor: themeColor }]} 
+              onPress={onClose}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.btnText}>CONTINUE</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -33,19 +41,32 @@ const CustomAlert = ({ isVisible, title, message, type, onClose }) => {
 };
 
 const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
   container: {
+    width: '100%',
+    maxWidth: 380,
     backgroundColor: 'white',
-    borderRadius: 30, // More rounded
+    borderRadius: 30,
     overflow: 'hidden',
-    marginHorizontal: 15,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
   },
   header: {
-    height: 140, // Taller header
+    height: 140,
     justifyContent: 'center',
     alignItems: 'center',
   },
   content: {
-    padding: 30,
+    padding: 25,
     alignItems: 'center',
   },
   title: {
@@ -53,6 +74,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#333',
     marginBottom: 10,
+    textAlign: 'center',
   },
   message: {
     fontSize: 15,
@@ -63,16 +85,17 @@ const styles = StyleSheet.create({
   },
   btn: {
     width: '100%',
-    height: 55,
-    borderRadius: 18,
+    height: 52,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
+    elevation: 3,
   },
   btnText: {
     color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   }
 });
 

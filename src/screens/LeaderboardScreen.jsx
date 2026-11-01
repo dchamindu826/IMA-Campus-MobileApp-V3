@@ -10,7 +10,6 @@ import {
   Image,
   StatusBar,
   Dimensions,
-  SafeAreaView,
   Platform
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -401,11 +400,11 @@ export default function LeaderboardScreen({ navigation }) {
 
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0a0f1d" />
 
       {/* Screen Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -1166,7 +1165,7 @@ export default function LeaderboardScreen({ navigation }) {
           <View style={{ height: 50 }} />
         </ScrollView>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

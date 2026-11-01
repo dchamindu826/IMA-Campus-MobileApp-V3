@@ -1,6 +1,6 @@
 import React, { useState, useLayoutEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image, Platform, TextInput, Modal, Dimensions, Alert, StatusBar } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'; 
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import COLORS from '../constants/colors';
@@ -18,6 +18,7 @@ const wrongReceiptImg = require('../assets/wrong-receipt.jpg');
 const MERCHANT_ID = "222646";
 
 const PaymentMethodScreen = ({ route, navigation }) => {
+    const insets = useSafeAreaInsets();
     const { amount, businessId, batchId, groupId, subjects, payType, mainPaymentId, installmentPaymentId, systemRemark, isUpgrade, upgradesPayload } = route.params || {};
 
     const [method, setMethod] = useState(null); 
@@ -187,7 +188,7 @@ const PaymentMethodScreen = ({ route, navigation }) => {
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} translucent={true} />
       <CustomAlert isVisible={alertVisible} title={alertConfig.title} message={alertConfig.msg} type={alertConfig.type} onClose={() => setAlertVisible(false)} />
       
-      <View style={styles.redHeader}>
+      <View style={[styles.redHeader, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
         <View style={styles.headerTopRow}>
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}><Icon name="arrow-left" size={24} color="white" /></TouchableOpacity>
             <View style={{flex: 1}}>
@@ -352,8 +353,6 @@ const PaymentMethodScreen = ({ route, navigation }) => {
   );
 };
 
-const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 50 : StatusBar.currentHeight || 24;
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
   mainBackground: { flex: 1 },
@@ -361,8 +360,7 @@ const styles = StyleSheet.create({
   redHeader: { 
     backgroundColor: COLORS.primary, 
     paddingHorizontal: 20, 
-    paddingBottom: 25, 
-    paddingTop: STATUSBAR_HEIGHT + 10, 
+    paddingBottom: 22, 
     borderBottomLeftRadius: 35, 
     borderBottomRightRadius: 35, 
     elevation: 8, zIndex: 10,

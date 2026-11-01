@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Animated, Alert, Linking, StatusBar, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Animated, Alert, Linking, StatusBar, Image, ActivityIndicator, Platform } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -286,7 +286,7 @@ const LiveScreen = () => {
     <View style={styles.container}>
       <StatusBar backgroundColor="transparent" barStyle="light-content" translucent={true} />
 
-      <LinearGradient colors={['#9A0007', '#E53935']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.topHeader, { paddingTop: insets.top + 20, borderBottomLeftRadius: 35, borderBottomRightRadius: 35 }]}>
+      <LinearGradient colors={['#9A0007', '#E53935']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.topHeader, { paddingTop: Math.max(insets.top, 20) + 8, borderBottomLeftRadius: 35, borderBottomRightRadius: 35 }]}>
         <Text style={styles.headerTitle}>Upcoming Lives</Text>
         <Text style={styles.subHeader}>Your schedule for this week</Text>
       </LinearGradient>

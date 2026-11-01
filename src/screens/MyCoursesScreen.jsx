@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Image, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Image, StatusBar, Platform } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -197,7 +197,7 @@ const MyCoursesScreen = ({ navigation }) => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
 
-      <LinearGradient colors={[COLORS.primary, '#9A0007']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.redHeader, { paddingTop: insets.top + 15 }]}>
+      <LinearGradient colors={[COLORS.primary, '#9A0007']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.redHeader, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
         <Icon name="school" size={150} color="rgba(255,255,255,0.06)" style={{ position: 'absolute', right: -30, top: -20, transform: [{ rotate: '-15deg' }] }} />
         <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
           <Icon name="arrow-left" size={24} color="white" />
@@ -262,7 +262,7 @@ const MyCoursesScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
-  redHeader: { paddingHorizontal: 20, paddingBottom: 25, borderBottomLeftRadius: 35, borderBottomRightRadius: 35, elevation: 8, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4, overflow: 'hidden' }, shadowOpacity: 0.3, shadowRadius: 10, zIndex: 10, flexDirection: 'row', alignItems: 'center' },
+  redHeader: { paddingHorizontal: 20, paddingBottom: 22, minHeight: 115, borderBottomLeftRadius: 35, borderBottomRightRadius: 35, elevation: 8, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, zIndex: 10, flexDirection: 'row', alignItems: 'center' },
   backBtn: { marginRight: 15, padding: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
   headerTitle: { fontSize: 20, fontWeight: '900', color: 'white', letterSpacing: 0.5 },
   subHeaderText: { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginTop: 2 },

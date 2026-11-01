@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, Modal, FlatList, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthContext } from '../context/AuthContext';
 import { CallContext } from '../context/CallContext';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -15,6 +16,7 @@ const STATUS_OPTIONS = [
 ];
 
 const StaffDashboardScreen = ({ navigation }) => {
+    const insets = useSafeAreaInsets();
     const { userInfo, logout } = useContext(AuthContext);
     const { socket } = useContext(CallContext);
     
@@ -77,7 +79,7 @@ const StaffDashboardScreen = ({ navigation }) => {
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
-            <LinearGradient colors={[COLORS.primary, '#9B1B1B']} style={styles.header}>
+            <LinearGradient colors={[COLORS.primary, '#9B1B1B']} style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
                 <View style={styles.topRow}>
                     <View style={styles.userInfoRow}>
                         <Icon name="shield-account" size={40} color="white" />
@@ -196,7 +198,7 @@ const StaffDashboardScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8F9FB' },
-    header: { paddingTop: 50, paddingBottom: 30, paddingHorizontal: 25, borderBottomLeftRadius: 35, borderBottomRightRadius: 35, elevation: 10 },
+    header: { paddingBottom: 30, paddingHorizontal: 25, borderBottomLeftRadius: 35, borderBottomRightRadius: 35, elevation: 10 },
     topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     userInfoRow: { flexDirection: 'row', alignItems: 'center' },
     greetingText: { color: '#E0E0E0', fontSize: 14, fontWeight: '500' },

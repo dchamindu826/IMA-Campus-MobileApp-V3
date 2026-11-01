@@ -6,6 +6,7 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { Picker } from '@react-native-picker/picker'; 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import COLORS from '../constants/colors';
 import { AuthContext } from '../context/AuthContext';
 import api, { IMAGE_URL } from '../services/api';
@@ -25,6 +26,7 @@ const PasswordRequirement = ({ met, text }) => (
 const districtsList = ["Ampara", "Anuradhapura", "Badulla", "Batticaloa", "Colombo", "Galle", "Gampaha", "Hambantota", "Jaffna", "Kalutara", "Kandy", "Kegalle", "Kilinochchi", "Kurunegala", "Mannar", "Matale", "Matara", "Monaragala", "Mullaitivu", "Nuwara Eliya", "Polonnaruwa", "Puttalam", "Ratnapura", "Trincomalee", "Vavuniya"];
 
 const ProfileScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const { userInfo, logout, updateUserInfo, userToken } = useContext(AuthContext);
   
   const [loading, setLoading] = useState(false);
@@ -159,7 +161,7 @@ const ProfileScreen = ({ navigation }) => {
       <CustomAlert isVisible={alertVisible} title={alertConfig.title} message={alertConfig.msg} type={alertConfig.type} onClose={() => setAlertVisible(false)} />
       
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{paddingBottom: 40}}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
           <View style={styles.topBar}>
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
               <Icon name="arrow-left" size={24} color="white" />
@@ -280,10 +282,8 @@ const ProfileScreen = ({ navigation }) => {
   );
 };
 
-const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 50 : StatusBar.currentHeight || 24;
-
 const styles = StyleSheet.create({
-  header: { alignItems: 'center', paddingBottom: 35, paddingTop: STATUSBAR_HEIGHT, backgroundColor: COLORS.primary, borderBottomLeftRadius: 40, borderBottomRightRadius: 40, elevation: 8, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
+  header: { alignItems: 'center', paddingBottom: 35, backgroundColor: COLORS.primary, borderBottomLeftRadius: 40, borderBottomRightRadius: 40, elevation: 8, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
   topBar: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20 },
   backBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
   topBarTitle: { color: 'white', fontSize: 20, fontWeight: '700', letterSpacing: 0.5 },

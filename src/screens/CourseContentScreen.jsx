@@ -16,7 +16,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import CustomAlert from '../components/CustomAlert';
 import { AuthContext } from '../context/AuthContext';
-import SecureYouTubePlayerView, { parseYouTubeUrl } from '../components/SecureYouTubePlayerView';
+import YouTubePlayer, { parseYouTube as parseYouTubeUrl } from '../components/YouTubePlayer';
 
 const KNOWN_TABS = [
     { key: 'recordings', title: 'Recordings', type: 'recording', icon: 'video-outline' },
@@ -28,6 +28,32 @@ const KNOWN_TABS = [
 
 // 🔥 SECURE INTERNAL PATH DEFINITION 🔥
 const secureStoragePath = Platform.OS === 'ios' ? RNFS.LibraryDirectoryPath : RNFS.DocumentDirectoryPath;
+
+export const getYouTubeID = (url) => {
+    if (!url) return null;
+    const parsed = parseYouTubeUrl(url);
+    return parsed?.videoId || null;
+};
+
+export const extractYouTubeFromItem = (item) => {
+    if (!item) return null;
+    const fields = [
+        item.youtubeLink, item.youtube_link, item.youtubeUrl, item.youtube_url,
+        item.ytId, item.yt_id, item.videoId, item.video_id,
+        item.link, item.url, item.videoUrl, item.video_url, item.file,
+        item.recording_url, item.recordingUrl, item.embed, item.embeddedLink,
+        item.content, item.stream_url, item.streamUrl
+    ];
+    for (const val of fields) {
+        if (val) {
+            const parsed = parseYouTubeUrl(val);
+            if (parsed && (parsed.videoId || parsed.listId)) {
+                return { ytId: parsed.videoId, listId: parsed.listId, link: String(val).trim() };
+            }
+        }
+    }
+    return null;
+};
 
 const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onShowAlert, courseTitle, onTakeExam }) => {
     const [openFolders, setOpenFolders] = useState({});
@@ -186,7 +212,7 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
                 try {
                     const d = new Date(item.date);
                     if (!isNaN(d.getTime())) targetMonthIdx = d.getMonth();
-                } catch (err) {}
+                } catch (err) { }
             }
             if (targetMonthIdx === -1 && item.title) {
                 const titleLower = item.title.toLowerCase();
@@ -263,13 +289,10 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
         const isLive = isLiveType;
         const isPaper = isPaperType;
 
-        const isYtUrl = (url) => {
-            if (!url) return false;
-            return /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|live\/|shorts\/))([\w-]{11})/.test(url);
-        };
-
-        const hasYt = !!(item.youtubeLink || (item.link && isYtUrl(item.link)));
-        const hasZoom = !!(item.link && !isYtUrl(item.link));
+        const ytSource = extractYouTubeFromItem(item);
+        const hasYt = !!ytSource;
+        const directCandidate = item.link || item.url || item.videoUrl || item.video_url || item.file;
+        const hasZoom = !hasYt && !!directCandidate;
 
         return (
             <View key={item.id} style={styles.itemCard}>
@@ -449,6 +472,12 @@ const CourseContentScreen = ({ route, navigation }) => {
     const [isYtFullscreen, setIsYtFullscreen] = useState(false);
     const webViewRef = useRef(null);
 
+    const closePlayer = () => {
+        setPlayingItem(null);
+        setYtPlaying(false);
+        setIsYtFullscreen(false);
+    };
+
     const [alertVisible, setAlertVisible] = useState(false);
     const [alertConfig, setAlertConfig] = useState({ title: '', msg: '', type: 'success' });
     const [activeTab, setActiveTab] = useState(route.params?.activeTab || 'recordings');
@@ -478,64 +507,42 @@ const CourseContentScreen = ({ route, navigation }) => {
         } catch (error) { }
     };
 
-    const getYouTubeID = (url) => {
-        if (!url) return null;
-        const regex = /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|live\/|shorts\/))([\w-]{11})/;
-        const match = url.match(regex);
-        return match ? match[1] : null;
-    };
-
     // 🔥 PLAYBACK LOGIC (YOUTUBE / ZOOM / OFFLINE) 🔥
     const handlePlayVideo = async (item, forcedType = 'auto') => {
-        let videoLink = null;
-        let isYt = false;
-        let ytId = null;
+        const ytSource = extractYouTubeFromItem(item);
+        console.log("[handlePlayVideo]", { forcedType, ytSource, itemTitle: item?.title, itemLink: item?.link, itemYt: item?.youtubeLink });
 
-        if (forcedType === 'yt') {
-            videoLink = item.youtubeLink || (getYouTubeID(item.link) ? item.link : null);
-            ytId = getYouTubeID(videoLink);
-            isYt = true;
-        } else if (forcedType === 'zoom') {
-            videoLink = (item.link && !getYouTubeID(item.link)) ? item.link : (item.link || item.url || item.file);
-            isYt = false;
-        } else {
-            const detectedYt = getYouTubeID(item.youtubeLink) || getYouTubeID(item.link);
-            if (detectedYt) {
-                videoLink = item.youtubeLink || item.link;
-                ytId = detectedYt;
-                isYt = true;
-            } else {
-                videoLink = item.link || item.url || item.file;
-                isYt = false;
+        if (forcedType === 'yt' || (!forcedType && ytSource) || (forcedType === 'auto' && ytSource) || (ytSource && !item.link)) {
+            if (ytSource) {
+                saveToRecent(item);
+                setPlayingItem({ ...item, isYouTube: true, ytId: ytSource.ytId, link: ytSource.link, youtubeLink: ytSource.link });
+                setYtPlaying(true);
+                return;
             }
         }
 
-        if (!videoLink && !ytId) return Alert.alert("Error", "Video link is unavailable.");
+        let videoLink = item.link || item.url || item.videoUrl || item.video_url || item.file;
+        if (!videoLink) return Alert.alert("Error", "Video link is unavailable.");
 
         saveToRecent(item);
 
-        if (isYt && ytId) {
-            setPlayingItem({ ...item, isYouTube: true, ytId: ytId, link: videoLink });
-            setYtPlaying(true);
-        } else {
-            // Check if file is downloaded securely in App Internal Storage
-            const securePath = `${secureStoragePath}/f_${item.id}.mp4`;
-            try {
-                const fileExists = await RNFS.exists(securePath);
-                if (fileExists) {
-                    const stat = await RNFS.stat(securePath);
-                    if (stat.size > 2 * 1024 * 1024) { // Valid video file check
-                        setPlayingItem({ ...item, link: `file://${securePath}`, isYouTube: false, isOffline: true });
-                        return; // Play offline and exit function
-                    }
+        // Check if file is downloaded securely in App Internal Storage
+        const securePath = `${secureStoragePath}/f_${item.id}.mp4`;
+        try {
+            const fileExists = await RNFS.exists(securePath);
+            if (fileExists) {
+                const stat = await RNFS.stat(securePath);
+                if (stat.size > 2 * 1024 * 1024) { // Valid video file check
+                    setPlayingItem({ ...item, link: `file://${securePath}`, isYouTube: false, isOffline: true });
+                    return; // Play offline and exit function
                 }
-            } catch (err) {
-                console.log("Offline playback check error: ", err);
             }
-
-            // Online Zoom or Direct Video Playback
-            setPlayingItem({ ...item, link: videoLink, isYouTube: false, isOffline: false });
+        } catch (err) {
+            console.log("Offline playback check error: ", err);
         }
+
+        // Online Zoom or Direct Video Playback
+        setPlayingItem({ ...item, link: videoLink, isYouTube: false, isOffline: false });
     };
 
     if (loading) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
@@ -547,8 +554,8 @@ const CourseContentScreen = ({ route, navigation }) => {
         return (
             <View style={styles.container}>
                 <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
-                <LinearGradient colors={[COLORS.primary, '#9A0007']} start={{x: 0, y: 0}} end={{x: 1, y: 1}} style={[styles.redHeader, { paddingTop: insets.top + 15 }]}>
-                    <Icon name="school" size={150} color="rgba(255,255,255,0.06)" style={{position: 'absolute', right: -30, top: -20, transform: [{rotate: '-15deg'}]}} />
+                <LinearGradient colors={[COLORS.primary, '#9A0007']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.redHeader, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
+                    <Icon name="school" size={150} color="rgba(255,255,255,0.06)" style={{ position: 'absolute', right: -30, top: -20, transform: [{ rotate: '-15deg' }] }} />
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}><Icon name="arrow-left" size={24} color="white" /></TouchableOpacity>
                     <Text style={styles.headerTitle} numberOfLines={1}>{courseTitle}</Text>
                 </LinearGradient>
@@ -569,8 +576,8 @@ const CourseContentScreen = ({ route, navigation }) => {
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
             <CustomAlert isVisible={alertVisible} title={alertConfig.title} message={alertConfig.msg} type={alertConfig.type} onClose={() => setAlertVisible(false)} />
 
-            <LinearGradient colors={[COLORS.primary, '#9A0007']} start={{x: 0, y: 0}} end={{x: 1, y: 1}} style={[styles.redHeader, { paddingTop: insets.top + 15 }]}>
-                <Icon name="school" size={150} color="rgba(255,255,255,0.06)" style={{position: 'absolute', right: -30, top: -20, transform: [{rotate: '-15deg'}]}} />
+            <LinearGradient colors={[COLORS.primary, '#9A0007']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.redHeader, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
+                <Icon name="school" size={150} color="rgba(255,255,255,0.06)" style={{ position: 'absolute', right: -30, top: -20, transform: [{ rotate: '-15deg' }] }} />
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}><Icon name="arrow-left" size={24} color="white" /></TouchableOpacity>
                 <Text style={styles.headerTitle} numberOfLines={1}>{courseTitle}</Text>
             </LinearGradient>
@@ -608,12 +615,17 @@ const CourseContentScreen = ({ route, navigation }) => {
             </View>
 
             {/* 🔴 SECURE VIDEO PLAYER MODAL 🔴 */}
-            <Modal visible={!!playingItem} animationType="slide" onRequestClose={() => { setPlayingItem(null); setYtPlaying(false); setIsYtFullscreen(false); }}>
-                <View style={{ flex: 1, backgroundColor: 'black' }}>
+            <Modal
+                visible={!!playingItem}
+                animationType="slide"
+                supportedOrientations={['portrait', 'landscape']}
+                onRequestClose={closePlayer}
+            >
+                <View style={{ flex: 1, backgroundColor: '#000' }}>
 
                     {!isYtFullscreen && (
-                        <View style={[styles.playerHeader, { paddingTop: insets.top + 15 }]}>
-                            <TouchableOpacity onPress={() => { setPlayingItem(null); setYtPlaying(false); setIsYtFullscreen(false); }} style={styles.backBtn}>
+                        <View style={[styles.playerHeader, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
+                            <TouchableOpacity onPress={closePlayer} style={styles.backBtn}>
                                 <Icon name="close" size={24} color="white" />
                             </TouchableOpacity>
                             <Text style={{ color: 'white', fontWeight: 'bold', flex: 1, fontSize: 16 }} numberOfLines={1}>
@@ -622,53 +634,53 @@ const CourseContentScreen = ({ route, navigation }) => {
                         </View>
                     )}
 
-                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' }}>
-                        {playingItem?.isYouTube ? (
-                            <View style={isYtFullscreen ? { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', zIndex: 9999 } : { width: width, aspectRatio: 16 / 9 }}>
-                                <SecureYouTubePlayerView
-                                    videoId={playingItem.ytId}
-                                    url={playingItem.link || playingItem.youtubeLink}
-                                    autoPlay={true}
-                                    onFullscreenChange={(fs) => setIsYtFullscreen(fs)}
-                                    style={{ width: '100%', height: '100%' }}
-                                />
-                            </View>
-                        ) : (
-                            // 🔥 FIX: Supports Both Online & Offline Video Playback through WebView 
+                    {__DEV__ && !isYtFullscreen && (
+                        <Text style={{ color: '#0f0', fontSize: 11, paddingHorizontal: 20, paddingBottom: 8 }}>
+                            isYouTube: {String(playingItem?.isYouTube)} | ytId: {String(playingItem?.ytId)}{'\n'}
+                            link: {String(playingItem?.link)}
+                        </Text>
+                    )}
+
+                    {playingItem?.isYouTube ? (
+                        <View style={isYtFullscreen ? StyleSheet.absoluteFillObject : { width: width, aspectRatio: 16 / 9, alignSelf: 'center', backgroundColor: '#000' }}>
+                            <YouTubePlayer
+                                key={String(playingItem.id || playingItem.ytId)}
+                                url={playingItem.link || playingItem.youtubeLink}
+                                videoId={playingItem.ytId}
+                                autoPlay={true}
+                                onFullscreenChange={setIsYtFullscreen}
+                                onStatusChange={(d) => console.log('[YT status]', d?.status, d?.message)}
+                                style={{ width: '100%', height: '100%' }}
+                            />
+                        </View>
+                    ) : (
+                        // Zoom / offline video (kalin thibba widihatama)
+                        <View style={{ flex: 1 }}>
                             <WebView
                                 source={
                                     playingItem?.isOffline
                                         ? {
-                                            html: `
-                            <!DOCTYPE html>
-                            <html>
-                            <head>
-                                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-                                <style>
-                                    body { margin: 0; background-color: #000; display: flex; align-items: center; justify-content: center; height: 100vh; }
-                                    video { width: 100%; height: auto; max-height: 100vh; outline: none; }
-                                </style>
-                            </head>
-                            <body>
-                                <video controls autoplay controlsList="nodownload">
-                                    <source src="${playingItem?.link}" type="video/mp4">
-                                </video>
-                            </body>
-                            </html>
-                        ` }
+                                            html: `<!DOCTYPE html><html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>body{margin:0;background:#000;display:flex;align-items:center;justify-content:center;height:100vh}video{width:100%;height:auto;max-height:100vh;outline:none}</style>
+</head><body>
+<video controls autoplay playsinline controlsList="nodownload"><source src="${playingItem?.link}" type="video/mp4"></video>
+</body></html>`
+                                        }
                                         : { uri: playingItem?.link }
                                 }
-                                style={{ width: width, flex: 1, backgroundColor: 'black' }}
-                                allowsInlineMediaPlayback={true}
+                                style={{ flex: 1, backgroundColor: 'black' }}
+                                containerStyle={{ flex: 1, backgroundColor: '#000' }}
+                                allowsInlineMediaPlayback
                                 originWhitelist={['*']}
-                                allowFileAccess={true}
-                                allowFileAccessFromFileURLs={true}
-                                allowUniversalAccessFromFileURLs={true}
-                                javaScriptEnabled={true}
-                                domStorageEnabled={true}
+                                allowFileAccess
+                                allowFileAccessFromFileURLs
+                                allowUniversalAccessFromFileURLs
+                                javaScriptEnabled
+                                domStorageEnabled
                             />
-                        )}
-                    </View>
+                        </View>
+                    )}
                 </View>
             </Modal>
         </View>
@@ -677,7 +689,7 @@ const CourseContentScreen = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F5F7FA' },
-    redHeader: { paddingHorizontal: 20, paddingBottom: 25, borderBottomLeftRadius: 35, borderBottomRightRadius: 35, elevation: 8, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 , overflow: 'hidden'}, shadowOpacity: 0.3, shadowRadius: 10, zIndex: 10, flexDirection: 'row', alignItems: 'center' },
+    redHeader: { paddingHorizontal: 20, paddingBottom: 22, minHeight: 115, borderBottomLeftRadius: 35, borderBottomRightRadius: 35, elevation: 8, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, zIndex: 10, flexDirection: 'row', alignItems: 'center' },
     backBtn: { marginRight: 15, padding: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
     headerTitle: { fontSize: 20, fontWeight: '900', color: 'white', letterSpacing: 0.5, flex: 1 },
     customTabBarContainer: { marginTop: 15, marginBottom: 5 },

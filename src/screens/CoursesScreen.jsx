@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, TextInput, StatusBar, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import COLORS from '../constants/colors';
 import api, { IMAGE_URL } from '../services/api';
 
 const CoursesScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const [businesses, setBusinesses] = useState([]);
   const [filteredBusinesses, setFilteredBusinesses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,7 +64,7 @@ const CoursesScreen = ({ navigation }) => {
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} translucent={true}/>
       
       {/* 🔥 Premium Red Header 🔥 */}
-      <LinearGradient colors={[COLORS.primary, '#9A0007']} start={{x: 0, y: 0}} end={{x: 1, y: 1}} style={styles.redHeader}>
+      <LinearGradient colors={[COLORS.primary, '#9A0007']} start={{x: 0, y: 0}} end={{x: 1, y: 1}} style={[styles.redHeader, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
         <Icon name="school" size={150} color="rgba(255,255,255,0.06)" style={{position: 'absolute', right: -30, top: -20, transform: [{rotate: '-15deg'}]}} />
         <Text style={styles.headerTitle}>Available Courses</Text>
         <View style={styles.searchContainer}>
@@ -99,16 +100,13 @@ const CoursesScreen = ({ navigation }) => {
   );
 };
 
-const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 50 : StatusBar.currentHeight || 24;
-
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F5F7FA' },
   mainBackground: { flex: 1, backgroundColor: '#F5F7FA' },
   
   redHeader: { 
     paddingHorizontal: 20, 
-    paddingBottom: 25, 
-    paddingTop: STATUSBAR_HEIGHT + 10, 
+    paddingBottom: 22, 
     borderBottomLeftRadius: 35, 
     borderBottomRightRadius: 35, 
     elevation: 8, 

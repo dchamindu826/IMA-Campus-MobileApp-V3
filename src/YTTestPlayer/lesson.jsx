@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { View, Text, ScrollView, StyleSheet } from "react-native";
 import { Stack } from "expo-router";
-import LessonVideo from "../components/LessonVideo";
+import YouTubePlayer from "../components/YouTubePlayer";
 
 export default function LessonScreen() {
   const [full, setFull] = useState(false);
@@ -10,12 +10,12 @@ export default function LessonScreen() {
   return (
     <View style={styles.screen}>
       {/* Fullscreen weddi header eka hangana */}
-      <Stack.Screen options={{ headerShown: !full, title: "Lesson 01" }} />
+      {Stack && Stack.Screen && <Stack.Screen options={{ headerShown: !full, title: "Lesson 01" }} />}
 
-      <LessonVideo
-        url="https://www.youtube.com/playlist?list=PLOfumqay9m8j57AKqVnDdTDuQzknco1kQ"
+      <YouTubePlayer
+        url="https://www.youtube.com/watch?v=UloSAi-MgPY"
         onFullscreenChange={setFull}
-        onStatus={(status, message) => console.log("[video]", status, message)}
+        onStatus={(status, data) => console.log("[video]", status, data)}
       />
 
       {!full && (

@@ -2,12 +2,13 @@ import React, { useState, useEffect, useContext, useRef, useCallback } from 'rea
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar,
   Image, Modal, FlatList, Dimensions, RefreshControl,
-  AppState, Linking, Animated
+  AppState, Linking, Animated, Platform
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import COLORS from '../constants/colors';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LottieView from 'lottie-react-native';
 
@@ -26,6 +27,7 @@ const SNAP_INTERVAL = CARD_WIDTH + CARD_MARGIN;
 
 const HomeScreen = ({ navigation }) => {
   const { userInfo, userToken, logout } = useContext(AuthContext);
+  const insets = useSafeAreaInsets();
   const [greeting, setGreeting] = useState('');
 
   const [posts, setPosts] = useState([]);
@@ -164,9 +166,17 @@ const HomeScreen = ({ navigation }) => {
           });
           courseIds = [...new Set(courseIds.filter(Boolean))];
 
-          businessIds.forEach(id => messaging().subscribeToTopic(`business_${id}`));
-          batchIds.forEach(id => messaging().subscribeToTopic(`batch_${id}`));
-          courseIds.forEach(id => messaging().subscribeToTopic(`course_${id}`));
+          if (Platform.OS === 'ios') {
+            const apnsToken = await messaging().getAPNSToken().catch(() => null);
+            if (!apnsToken) {
+              console.log('Skipping FCM Topic Subscription on iOS Simulator');
+              return;
+            }
+          }
+
+          businessIds.forEach(id => messaging().subscribeToTopic(`business_${id}`).catch(() => {}));
+          batchIds.forEach(id => messaging().subscribeToTopic(`batch_${id}`).catch(() => {}));
+          courseIds.forEach(id => messaging().subscribeToTopic(`course_${id}`).catch(() => {}));
 
           console.log('✅ Successfully Subscribed to FCM Topics -> Businesses:', businessIds, '| Batches:', batchIds, '| Courses:', courseIds);
         }
@@ -347,7 +357,7 @@ const HomeScreen = ({ navigation }) => {
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
       <CustomAlert isVisible={alertVisible} title={alertConfig.title} message={alertConfig.msg} type={alertConfig.type} onClose={() => setAlertVisible(false)} />
 
-      <LinearGradient colors={[COLORS.primary, '#9A0007']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>
+      <LinearGradient colors={[COLORS.primary, '#9A0007']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
         <Icon name="school" size={150} color="rgba(255,255,255,0.06)" style={{ position: 'absolute', right: -30, top: -20, transform: [{ rotate: '-15deg' }] }} />
         <View style={styles.topRow}>
           <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
@@ -423,8 +433,8 @@ const HomeScreen = ({ navigation }) => {
                   navigation.navigate('Delivery');
                 } else if (item.targetTab === 'Leaderboard') {
                   navigation.navigate('Leaderboard');
-                } else if (item.targetTab === 'YTPlayerTest') {
-                  navigation.navigate('YTPlayerTest');
+                } else if (item.targetTab === 'YTPlayerTest' || item.targetTab === 'YTDebug') {
+                  navigation.navigate('YTDebug');
                 } else if (item.targetTab) {
                   navigation.navigate('MainTabs', { screen: item.targetTab });
                 }
@@ -630,23 +640,23 @@ const HomeScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FB' },
-  header: { paddingTop: 50, paddingBottom: 20, paddingHorizontal: 25, borderBottomLeftRadius: 35, borderBottomRightRadius: 35, elevation: 10, overflow: 'hidden' },
+  container: { flex: 1, backgroundColor: '#F8F9FB', width: '100%' },
+  header: { width: '100%', paddingBottom: 22, paddingHorizontal: 25, borderBottomLeftRadius: 35, borderBottomRightRadius: 35, borderTopLeftRadius: 0, borderTopRightRadius: 0, elevation: 10, overflow: 'hidden' },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   bellButton: { width: 45, height: 45, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
   badge: { position: 'absolute', top: 12, right: 12, width: 8, height: 8, backgroundColor: '#FFD700', borderRadius: 4, borderWidth: 2, borderColor: COLORS.primary },
   logoContainer: { alignItems: 'center', marginTop: 10, marginBottom: 10, width: width - 50, alignSelf: 'center' },
-  mainLogo: { width: '100%', height: 80 },
+  mainLogo: { width: '100%', height: 76 },
 
   /* NEW STYLES FOR HEADER BOTTOM ROW */
-  headerBottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 5 },
+  headerBottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 8 },
   welcomeContainer: { flex: 1, alignItems: 'flex-start' },
   greetingText: { color: '#E0E0E0', fontSize: 14, fontWeight: '500' },
   usernameText: { color: 'white', fontSize: 24, fontWeight: 'bold', letterSpacing: 0.5 },
   animationContainer: { width: 90, height: 90, justifyContent: 'flex-end', alignItems: 'flex-end' },
   /* -------------------------------- */
 
-  contentContainer: { flex: 1, paddingHorizontal: 0, marginTop: 25 },
+  contentContainer: { flex: 1, paddingHorizontal: 0, marginTop: 18 },
   sectionTitle: { fontSize: 19, fontWeight: '800', color: '#1A1A1A', marginBottom: 15, paddingHorizontal: 20 },
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 25, paddingHorizontal: 20 },
   actionBanner: { width: '31%', backgroundColor: 'white', borderRadius: 16, padding: 12, flexDirection: 'column', alignItems: 'center', marginBottom: 12, elevation: 3, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, borderWidth: 1, borderColor: '#FEE2E2' },
