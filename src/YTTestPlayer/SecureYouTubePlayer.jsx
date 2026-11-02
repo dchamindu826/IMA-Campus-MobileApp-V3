@@ -179,14 +179,16 @@ export default function SecureYouTubePlayer({ url, videoId: videoIdProp, listId:
         mountRef.current.appendChild(el);
 
         const playerVars = {
+          enablejsapi: 1,
+          origin: window.location.origin,
+          widget_referrer: window.location.href,
           controls: 0, disablekb: 1, rel: 0, modestbranding: 1,
           iv_load_policy: 3, fs: 0, playsinline: 1,
-          origin: window.location.origin,
         };
         if (listId) { playerVars.listType = "playlist"; playerVars.list = listId; }
 
         const opts = {
-          host: "https://www.youtube-nocookie.com",
+          host: "https://www.youtube.com",
           playerVars,
           events: {
             onReady: (e) => {

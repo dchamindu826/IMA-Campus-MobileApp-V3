@@ -30,6 +30,8 @@ import RegisterScreen from './src/screens/RegisterScreen';
 import LiveScreen from './src/screens/LiveScreen';
 import PaymentMethodScreen from './src/screens/PaymentMethodScreen'; 
 import StaffDashboardScreen from './src/screens/StaffDashboardScreen';
+import CrmContactsScreen from './src/screens/CrmContactsScreen';
+import WhatsAppChatScreen from './src/screens/WhatsAppChatScreen';
 import CommunityChatScreen from './src/screens/CommunityChatScreen'; 
 import SupportChatScreen from './src/screens/SupportChatScreen';
 import DeliveryScreen from './src/screens/DeliveryScreen';
@@ -102,21 +104,22 @@ const AppNavigation = () => {
     });
 
     let interval;
-    if (userToken) {
+    const isStudent = userInfo && (!userInfo.role || String(userInfo.role).toUpperCase() === 'STUDENT' || String(userInfo.role).toUpperCase() === 'USER');
+    if (userToken && isStudent) {
         interval = setInterval(async () => {
             try {
-                await api.get('mobile/dashboard'); 
+                await api.get('mobile/classroom'); 
             } catch (error) {
-                // Interceptor eken handle wei
+                // Handled by axios interceptor
             }
-        }, 5000); 
+        }, 10000); 
     }
 
     return () => {
         subscription.remove();
         if (interval) clearInterval(interval);
     };
-  }, [userToken]);
+  }, [userToken, userInfo?.role]);
 
   const handleForceLogout = async () => {
       setShowLogoutModal(false);
@@ -156,11 +159,23 @@ const AppNavigation = () => {
         ) : (
           <>
             {userInfo && userInfo.role && String(userInfo.role).toUpperCase() !== 'STUDENT' && String(userInfo.role).toUpperCase() !== 'USER' ? (
-                <Stack.Screen 
-                    name="StaffDashboard" 
-                    component={StaffDashboardScreen} 
-                    options={{ headerShown: false }} 
-                />
+                <>
+                    <Stack.Screen 
+                        name="StaffDashboard" 
+                        component={StaffDashboardScreen} 
+                        options={{ headerShown: false }} 
+                    />
+                    <Stack.Screen 
+                        name="CrmContacts" 
+                        component={CrmContactsScreen} 
+                        options={{ headerShown: false }} 
+                    />
+                    <Stack.Screen 
+                        name="WhatsAppChat" 
+                        component={WhatsAppChatScreen} 
+                        options={{ headerShown: false }} 
+                    />
+                </>
             ) : (
                 <Stack.Screen 
                     name="MainTabs" 
@@ -168,6 +183,8 @@ const AppNavigation = () => {
                     options={{ headerShown: false, animation: 'none' }} 
                 />
             )}
+            <Stack.Screen name="CrmContacts" component={CrmContactsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="WhatsAppChat" component={WhatsAppChatScreen} options={{ headerShown: false }} />
             <Stack.Screen name="CommunityChat" component={CommunityChatScreen} options={{ headerShown: false }} />
             <Stack.Screen name="SupportChat" component={SupportChatScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Downloads" component={DownloadsScreen} options={{ headerShown: false }} />
@@ -256,6 +273,14 @@ export default function App() {
           name: 'General Updates',
           importance: AndroidImportance.HIGH, 
           sound: 'default',
+        });
+
+        await notifee.createChannel({
+          id: 'calls_channel',
+          name: 'Incoming WhatsApp Calls',
+          importance: AndroidImportance.HIGH,
+          sound: 'default',
+          vibration: true
         });
 
         await messaging().subscribeToTopic('ima_updates');
