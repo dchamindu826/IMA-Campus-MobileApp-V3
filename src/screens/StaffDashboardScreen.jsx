@@ -66,23 +66,23 @@ const StaffDashboardScreen = ({ navigation }) => {
     const currentStatusConfig = STATUS_OPTIONS.find(s => s.value === agentStatus) || STATUS_OPTIONS[3];
 
     const theme = isDarkMode ? {
-        bg: '#0b141a',
-        cardBg: '#111b21',
+        bg: '#0F172A',
+        cardBg: '#1E293B',
         cardBorder: 'rgba(255, 255, 255, 0.08)',
-        textPrimary: '#e9edef',
-        textSecondary: '#8696a0',
-        accent: '#25D366',
-        headerGrad: ['#1f2c34', '#111b21'],
-        subCard: '#1f2c34'
+        textPrimary: '#F8FAFC',
+        textSecondary: '#94A3B8',
+        accent: '#EF4444',
+        headerGrad: ['#881337', '#1E293B'],
+        subCard: '#334155'
     } : {
-        bg: '#F3F4F6',
+        bg: '#F8FAFC',
         cardBg: '#FFFFFF',
         cardBorder: 'rgba(0, 0, 0, 0.06)',
-        textPrimary: '#111827',
-        textSecondary: '#6B7280',
-        accent: '#008069',
-        headerGrad: ['#008069', '#075e54'],
-        subCard: '#F9FAFB'
+        textPrimary: '#0F172A',
+        textSecondary: '#64748B',
+        accent: '#D32F2F',
+        headerGrad: [COLORS.primary, '#9A0007'],
+        subCard: '#FEF2F2'
     };
 
     const roleName = String(userInfo?.role || 'Staff').replace(/_/g, ' ');
@@ -91,7 +91,7 @@ const StaffDashboardScreen = ({ navigation }) => {
         <View style={[styles.container, { backgroundColor: theme.bg }]}>
             <StatusBar 
                 barStyle="light-content" 
-                backgroundColor={isDarkMode ? '#1f2c34' : '#008069'} 
+                backgroundColor={isDarkMode ? '#881337' : '#9A0007'} 
             />
 
             {/* Top Navigation Bar */}
@@ -181,17 +181,17 @@ const StaffDashboardScreen = ({ navigation }) => {
                     {/* Quick Stats Grid */}
                     <View style={styles.metricsRow}>
                         <View style={[styles.metricCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder }]}>
-                            <Icon name="domain" size={24} color="#3B82F6" />
+                            <Icon name="domain" size={24} color={theme.accent} />
                             <Text style={[styles.metricValue, { color: theme.textPrimary }]}>{businesses.length}</Text>
                             <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Allocated Businesses</Text>
                         </View>
                         <View style={[styles.metricCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder }]}>
-                            <Icon name="account-group" size={24} color="#10B981" />
+                            <Icon name="account-group" size={24} color={theme.accent} />
                             <Text style={[styles.metricValue, { color: theme.textPrimary }]}>{overview?.activeStudentsCount || 0}</Text>
                             <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Enrolled Leads</Text>
                         </View>
                         <View style={[styles.metricCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder }]}>
-                            <Icon name="buffer" size={24} color="#8B5CF6" />
+                            <Icon name="buffer" size={24} color={theme.accent} />
                             <Text style={[styles.metricValue, { color: theme.textPrimary }]}>{overview?.batches?.length || 0}</Text>
                             <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Active Batches</Text>
                         </View>
@@ -200,7 +200,7 @@ const StaffDashboardScreen = ({ navigation }) => {
                     {/* Section Title */}
                     <View style={styles.sectionHeader}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Icon name="whatsapp" size={22} color={theme.accent} style={{ marginRight: 8 }} />
+                            <Icon name="briefcase-outline" size={22} color={theme.accent} style={{ marginRight: 8 }} />
                             <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Allocated Businesses & CRMs</Text>
                         </View>
                         <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
@@ -231,11 +231,11 @@ const StaffDashboardScreen = ({ navigation }) => {
                                     <View style={styles.bizInfo}>
                                         <Text style={[styles.bizName, { color: theme.textPrimary }]}>{biz.name}</Text>
                                         <Text style={[styles.bizMeta, { color: theme.textSecondary }]}>
-                                            {biz.medium || 'Sinhala'} • {biz.category || 'Academic'}
+                                             {biz.medium || 'Sinhala'} • {biz.category || 'Academic'}
                                         </Text>
                                     </View>
-                                    <View style={styles.activeTag}>
-                                        <Text style={styles.activeTagText}>LIVE CRM</Text>
+                                    <View style={[styles.activeTag, { backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2', borderColor: isDarkMode ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5' }]}>
+                                        <Text style={[styles.activeTagText, { color: theme.accent }]}>LIVE CRM</Text>
                                     </View>
                                 </View>
 
@@ -243,9 +243,9 @@ const StaffDashboardScreen = ({ navigation }) => {
 
                                 {/* CRM Action Buttons for this Business */}
                                 <View style={styles.crmButtonsContainer}>
-                                    {/* 1. Free Seminar CRM */}
+                                    {/* 1. Free Seminar CRM (Primary Brand Button) */}
                                     <TouchableOpacity 
-                                        style={[styles.crmActionBtn, styles.freeSemBtn]}
+                                        style={[styles.crmActionBtn, { backgroundColor: isDarkMode ? '#DC2626' : '#D32F2F' }]}
                                         activeOpacity={0.85}
                                         onPress={() => navigation.navigate('CrmContacts', {
                                             businessId: biz.id,
@@ -261,12 +261,19 @@ const StaffDashboardScreen = ({ navigation }) => {
                                             <Text style={styles.crmBtnTitle}>Free Sem CRM</Text>
                                             <Text style={styles.crmBtnSubtitle}>Leads, Chats & WhatsApp Calls</Text>
                                         </View>
-                                        <Icon name="chevron-right" size={22} color="#FFFFFF" style={{ opacity: 0.8 }} />
+                                        <Icon name="chevron-right" size={22} color="#FFFFFF" style={{ opacity: 0.9 }} />
                                     </TouchableOpacity>
 
-                                    {/* 2. After Seminar CRM */}
+                                    {/* 2. After Seminar CRM (Cohesive Secondary Brand Card) */}
                                     <TouchableOpacity 
-                                        style={[styles.crmActionBtn, styles.afterSemBtn]}
+                                        style={[
+                                            styles.crmActionBtn, 
+                                            { 
+                                                backgroundColor: isDarkMode ? '#334155' : '#FFFFFF',
+                                                borderWidth: 1.5,
+                                                borderColor: isDarkMode ? 'rgba(239, 68, 68, 0.35)' : '#FCA5A5'
+                                            }
+                                        ]}
                                         activeOpacity={0.85}
                                         onPress={() => navigation.navigate('CrmContacts', {
                                             businessId: biz.id,
@@ -275,14 +282,14 @@ const StaffDashboardScreen = ({ navigation }) => {
                                             isDarkMode
                                         })}
                                     >
-                                        <View style={[styles.crmBtnIcon, { backgroundColor: '#4F46E5' }]}>
-                                            <Icon name="message-text-outline" size={20} color="#FFFFFF" />
+                                        <View style={[styles.crmBtnIcon, { backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2' }]}>
+                                            <Icon name="message-text-outline" size={20} color={isDarkMode ? '#F87171' : '#D32F2F'} />
                                         </View>
                                         <View style={styles.crmBtnTextCol}>
-                                            <Text style={styles.crmBtnTitle}>After Sem CRM</Text>
-                                            <Text style={styles.crmBtnSubtitle}>Enrolled Follow-up & Chats</Text>
+                                            <Text style={[styles.crmBtnTitle, { color: theme.textPrimary }]}>After Sem CRM</Text>
+                                            <Text style={[styles.crmBtnSubtitle, { color: theme.textSecondary }]}>Enrolled Follow-up & Chats</Text>
                                         </View>
-                                        <Icon name="chevron-right" size={22} color="#FFFFFF" style={{ opacity: 0.8 }} />
+                                        <Icon name="chevron-right" size={22} color={theme.textSecondary} />
                                     </TouchableOpacity>
                                 </View>
                             </View>

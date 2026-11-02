@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useRef, useContext, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useContext, useMemo, useCallback } from 'react';
 import {
     View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
     ImageBackground, Image, ActivityIndicator, Modal, KeyboardAvoidingView,
-    Platform, Dimensions, Alert, StatusBar
+    Platform, Dimensions, Alert, StatusBar, DeviceEventEmitter, ScrollView
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Video from 'react-native-video';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
 import { useCall } from '../context/CallContext';
 import { AuthContext } from '../context/AuthContext';
@@ -40,42 +41,44 @@ export default function WhatsAppChatScreen({ route, navigation }) {
     const [showQuickReplies, setShowQuickReplies] = useState(false);
     const [quickReplies, setQuickReplies] = useState([]);
     const [showLeadDetails, setShowLeadDetails] = useState(false);
+    const [callLogs, setCallLogs] = useState([]);
+    const [showCallHistoryModal, setShowCallHistoryModal] = useState(false);
 
     const flatListRef = useRef(null);
 
     const theme = useMemo(() => isDarkMode ? {
-        headerBg: '#1f2c34',
-        bg: '#0b141a',
-        bubbleIn: '#202c33',
+        headerBg: '#881337',
+        bg: '#0F172A',
+        bubbleIn: '#1E293B',
         bubbleOut: '#005c4b',
-        textIn: '#e9edef',
-        textOut: '#e9edef',
-        timeIn: '#8696a0',
-        timeOut: '#8696a0',
-        inputBarBg: '#1f2c34',
-        inputBoxBg: '#2a3942',
-        inputText: '#e9edef',
-        iconColor: '#8696a0',
-        sendBtn: '#00a884',
-        dateChipBg: 'rgba(17, 27, 33, 0.92)',
-        dateChipText: '#8696a0',
+        textIn: '#F8FAFC',
+        textOut: '#F8FAFC',
+        timeIn: '#94A3B8',
+        timeOut: '#94A3B8',
+        inputBarBg: '#1E293B',
+        inputBoxBg: '#334155',
+        inputText: '#F8FAFC',
+        iconColor: '#94A3B8',
+        sendBtn: '#EF4444',
+        dateChipBg: 'rgba(15, 23, 42, 0.92)',
+        dateChipText: '#94A3B8',
         doodleImg: require('../assets/whatsapp-bg-dark.png')
     } : {
-        headerBg: '#008069',
-        bg: '#efeae2',
-        bubbleIn: '#ffffff',
+        headerBg: '#D32F2F',
+        bg: '#F8FAFC',
+        bubbleIn: '#FFFFFF',
         bubbleOut: '#d9fdd3',
-        textIn: '#111b21',
-        textOut: '#111b21',
-        timeIn: '#667781',
-        timeOut: '#667781',
-        inputBarBg: '#f0f2f5',
-        inputBoxBg: '#ffffff',
-        inputText: '#111b21',
-        iconColor: '#54656f',
-        sendBtn: '#008069',
-        dateChipBg: 'rgba(255, 255, 255, 0.92)',
-        dateChipText: '#54656f',
+        textIn: '#0F172A',
+        textOut: '#0F172A',
+        timeIn: '#64748B',
+        timeOut: '#64748B',
+        inputBarBg: '#F1F5F9',
+        inputBoxBg: '#FFFFFF',
+        inputText: '#0F172A',
+        iconColor: '#64748B',
+        sendBtn: '#D32F2F',
+        dateChipBg: 'rgba(255, 255, 255, 0.95)',
+        dateChipText: '#64748B',
         doodleImg: require('../assets/whatsapp-bg-light.png')
     }, [isDarkMode]);
 
@@ -84,7 +87,7 @@ export default function WhatsAppChatScreen({ route, navigation }) {
     const leadPhone = lead?.phone || '';
 
     // Fetch Messages
-    const fetchMessages = async () => {
+    const fetchMessages = useCallback(async () => {
         if (!leadId) return;
         try {
             const endpoint = crmType === 'FREE_SEMINAR'
@@ -99,7 +102,7 @@ export default function WhatsAppChatScreen({ route, navigation }) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [leadId, crmType]);
 
     // Fetch Quick Replies
     const fetchQuickReplies = async () => {
@@ -114,7 +117,7 @@ export default function WhatsAppChatScreen({ route, navigation }) {
     useEffect(() => {
         fetchMessages();
         fetchQuickReplies();
-    }, [leadId]);
+    }, [leadId, fetchMessages]);
 
     // Socket real-time incoming messages
     useEffect(() => {
@@ -131,7 +134,73 @@ export default function WhatsAppChatScreen({ route, navigation }) {
         return () => {
             socket.off('new_inbound_message', handleNewMessage);
         };
-    }, [socket, leadId]);
+    }, [socket, leadId, fetchMessages]);
+
+    // Load Call History from local storage & sync
+    const fetchCallHistory = useCallback(async () => {
+        const cleanPhone = String(leadPhone || '').replace(/[^0-9]/g, '');
+        if (!cleanPhone) return;
+        try {
+            const key = `@wa_call_history_${cleanPhone}`;
+            const localData = await AsyncStorage.getItem(key);
+            const localList = localData ? JSON.parse(localData) : [];
+            setCallLogs(localList);
+        } catch (e) {
+            console.log("Mobile: Error loading call history:", e?.message);
+        }
+    }, [leadPhone]);
+
+    useEffect(() => {
+        fetchCallHistory();
+
+        const sub = DeviceEventEmitter.addListener('new_call_history_event', (event) => {
+            const cleanLead = String(leadPhone || '').replace(/[^0-9]/g, '');
+            const eventPhone = String(event?.phone || '').replace(/[^0-9]/g, '');
+            if (cleanLead && eventPhone && (cleanLead.endsWith(eventPhone) || eventPhone.endsWith(cleanLead))) {
+                setCallLogs(prev => [event, ...prev.filter(c => c.id !== event.id)]);
+            }
+        });
+
+        return () => sub.remove();
+    }, [leadPhone, fetchCallHistory]);
+
+    // Unified Feed (Messages + Voice Calls) sorted chronologically
+    const mergedFeed = useMemo(() => {
+        const allItems = [
+            ...messages.map(m => ({ ...m, feedType: 'MESSAGE' })),
+            ...callLogs.map(c => ({ ...c, feedType: 'CALL_EVENT', isCall: true }))
+        ];
+        return allItems.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+    }, [messages, callLogs]);
+
+    // Robust Outbound vs Inbound detector
+    const checkIsOutbound = useCallback((item) => {
+        if (item.isPending || item.isOutbound === true || item.is_outbound === true || item.fromMe === true) return true;
+        
+        const dir = String(item.direction || '').trim().toLowerCase();
+        if (dir === 'outbound' || dir === 'out') return true;
+        if (dir === 'inbound' || dir === 'in') return false;
+
+        const senderType = String(item.senderType || item.sender_type || item.senderRole || item.sender || '').trim().toUpperCase();
+        if (['COORDINATOR', 'STAFF', 'ADMIN', 'SYSTEM', 'BOT', 'BUSINESS', 'AGENT'].includes(senderType)) return true;
+        if (['STUDENT', 'LEAD', 'USER', 'CUSTOMER', 'CLIENT'].includes(senderType)) return false;
+
+        const cleanLead = String(leadPhone || '').replace(/[^0-9]/g, '');
+        if (item.to && cleanLead) {
+            const cleanTo = String(item.to).replace(/[^0-9]/g, '');
+            if (cleanTo && (cleanTo.endsWith(cleanLead) || cleanLead.endsWith(cleanTo))) return true;
+        }
+        if (item.from && cleanLead) {
+            const cleanFrom = String(item.from).replace(/[^0-9]/g, '');
+            if (cleanFrom && (cleanFrom.endsWith(cleanLead) || cleanLead.endsWith(cleanFrom))) return false;
+        }
+
+        if (item.senderName && (item.senderName === userInfo?.firstName || item.senderName === 'Staff')) {
+            return true;
+        }
+
+        return false;
+    }, [leadPhone, userInfo?.firstName]);
 
     // Send Message
     const handleSendMessage = async (textToSend) => {
@@ -215,19 +284,69 @@ export default function WhatsAppChatScreen({ route, navigation }) {
     };
 
     const renderMessageBubble = ({ item, index }) => {
-        const isOutbound = item.direction === 'OUTBOUND';
+        // Date separator
+        const prevMsg = index > 0 ? mergedFeed[index - 1] : null;
+        const showDate = !prevMsg || new Date(prevMsg.createdAt).toDateString() !== new Date(item.createdAt).toDateString();
+        const timeStr = new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        // Call event bubble in chat stream
+        if (item.feedType === 'CALL_EVENT' || item.isCall) {
+            const isCallOutbound = item.direction === 'OUTBOUND';
+            const isMissed = item.status === 'MISSED' || item.status === 'REJECTED';
+            const callDurationStr = item.duration > 0 
+                ? `${Math.floor(item.duration / 60)}m ${item.duration % 60}s` 
+                : isMissed ? 'Missed Call' : 'Cancelled';
+
+            return (
+                <View key={item.id || index}>
+                    {showDate && (
+                        <View style={styles.dateSeparator}>
+                            <View style={[styles.dateChip, { backgroundColor: theme.dateChipBg }]}>
+                                <Text style={[styles.dateChipText, { color: theme.dateChipText }]}>
+                                    {formatDateLabel(item.createdAt)}
+                                </Text>
+                            </View>
+                        </View>
+                    )}
+
+                    <View style={styles.callEventRow}>
+                        <View style={[styles.callEventBubble, { backgroundColor: isDarkMode ? '#1f2c34' : '#FFFFFF', borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : '#E5E7EB' }]}>
+                            <View style={[styles.callIconWrap, { backgroundColor: isMissed ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)' }]}>
+                                <Icon 
+                                    name={isMissed ? "phone-missed" : isCallOutbound ? "phone-outgoing" : "phone-incoming"} 
+                                    size={18} 
+                                    color={isMissed ? "#EF4444" : "#10B981"} 
+                                />
+                            </View>
+                            <View style={{ flex: 1, marginLeft: 10 }}>
+                                <Text style={[styles.callTitleText, { color: isDarkMode ? '#FFFFFF' : '#111827' }]}>
+                                    {isMissed ? 'Missed WhatsApp Call' : isCallOutbound ? 'Outgoing WhatsApp Call' : 'Incoming WhatsApp Call'}
+                                </Text>
+                                <Text style={[styles.callSubText, { color: isMissed ? '#EF4444' : (isDarkMode ? '#8696a0' : '#6B7280') }]}>
+                                    {callDurationStr} • {timeStr}
+                                </Text>
+                            </View>
+                            <TouchableOpacity 
+                                style={[styles.callBackBtn, { backgroundColor: isDarkMode ? 'rgba(37,211,102,0.15)' : '#E8F5E9' }]}
+                                onPress={handleStartCall}
+                                activeOpacity={0.8}
+                            >
+                                <Icon name="phone" size={14} color="#25D366" />
+                                <Text style={styles.callBackText}>Call</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            );
+        }
+
+        const isOutbound = checkIsOutbound(item);
         const isAudio = Boolean(item.mediaType && item.mediaType.includes('audio')) || Boolean(item.mediaUrl && item.mediaUrl.match(/\.(mp3|ogg|wav|m4a)$/i));
         const isImage = Boolean(item.mediaType && item.mediaType.includes('image')) || Boolean(item.mediaUrl && item.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)$/i));
         const isDoc = Boolean(item.mediaUrl && !isAudio && !isImage);
 
-        // Date separator
-        const prevMsg = index > 0 ? messages[index - 1] : null;
-        const showDate = !prevMsg || new Date(prevMsg.createdAt).toDateString() !== new Date(item.createdAt).toDateString();
-
-        const timeStr = new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
         return (
-            <View>
+            <View key={item.id || index}>
                 {showDate && (
                     <View style={styles.dateSeparator}>
                         <View style={[styles.dateChip, { backgroundColor: theme.dateChipBg }]}>
@@ -241,7 +360,9 @@ export default function WhatsAppChatScreen({ route, navigation }) {
                 <View style={[styles.bubbleRow, isOutbound ? styles.bubbleRowOut : styles.bubbleRowIn]}>
                     <View style={[
                         styles.bubble, 
-                        isOutbound ? { backgroundColor: theme.bubbleOut, borderTopRightRadius: 2 } : { backgroundColor: theme.bubbleIn, borderTopLeftRadius: 2 }
+                        isOutbound 
+                            ? { backgroundColor: theme.bubbleOut, borderTopRightRadius: 2, borderBottomRightRadius: 10, borderBottomLeftRadius: 10, borderTopLeftRadius: 10 } 
+                            : { backgroundColor: theme.bubbleIn, borderTopLeftRadius: 2, borderBottomLeftRadius: 10, borderBottomRightRadius: 10, borderTopRightRadius: 10 }
                     ]}>
                         
                         {/* Audio Voice Note Player */}
@@ -361,6 +482,20 @@ export default function WhatsAppChatScreen({ route, navigation }) {
                 </TouchableOpacity>
 
                 <View style={styles.headerActions}>
+                    {/* Call History Button */}
+                    <TouchableOpacity 
+                        onPress={() => setShowCallHistoryModal(true)}
+                        style={styles.headerIconBtn}
+                        activeOpacity={0.8}
+                    >
+                        <Icon name="phone-log" size={21} color="#FFFFFF" />
+                        {callLogs.length > 0 && (
+                            <View style={styles.headerBadge}>
+                                <Text style={styles.headerBadgeText}>{callLogs.length}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+
                     {/* Outbound WhatsApp Call Button */}
                     <TouchableOpacity 
                         onPress={handleStartCall}
@@ -404,8 +539,8 @@ export default function WhatsAppChatScreen({ route, navigation }) {
                 ) : (
                     <FlatList 
                         ref={flatListRef}
-                        data={messages}
-                        keyExtractor={(item) => String(item.id)}
+                        data={mergedFeed}
+                        keyExtractor={(item, idx) => String(item.id || item._id || idx)}
                         renderItem={renderMessageBubble}
                         contentContainerStyle={styles.messagesList}
                         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
@@ -548,6 +683,89 @@ export default function WhatsAppChatScreen({ route, navigation }) {
                         >
                             <Text style={styles.closeBtnText}>CLOSE</Text>
                         </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
+            {/* Call History Modal with Date Breakdown */}
+            <Modal
+                visible={showCallHistoryModal}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setShowCallHistoryModal(false)}
+            >
+                <TouchableOpacity 
+                    style={styles.modalBackdrop} 
+                    activeOpacity={1} 
+                    onPress={() => setShowCallHistoryModal(false)}
+                >
+                    <View style={[styles.callHistorySheet, { backgroundColor: isDarkMode ? '#1f2c34' : '#FFFFFF' }]} onStartShouldSetResponder={() => true}>
+                        <View style={styles.sheetHeader}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Icon name="phone-log" size={22} color="#25D366" style={{ marginRight: 8 }} />
+                                <Text style={[styles.sheetTitle, { color: isDarkMode ? '#FFFFFF' : '#111827' }]}>
+                                    Call History ({callLogs.length})
+                                </Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setShowCallHistoryModal(false)} style={{ marginLeft: 'auto' }}>
+                                <Icon name="close" size={22} color={isDarkMode ? '#8696a0' : '#6B7280'} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {callLogs.length === 0 ? (
+                            <View style={{ padding: 40, alignItems: 'center' }}>
+                                <Icon name="phone-missed" size={44} color={isDarkMode ? '#8696a0' : '#9CA3AF'} style={{ opacity: 0.5, marginBottom: 10 }} />
+                                <Text style={{ color: isDarkMode ? '#8696a0' : '#6B7280', fontSize: 15, fontWeight: '600' }}>No call records yet for this lead</Text>
+                                <Text style={{ color: isDarkMode ? '#8696a0' : '#9CA3AF', fontSize: 13, marginTop: 4, textAlign: 'center' }}>WhatsApp voice calls will automatically appear here with duration and timestamps.</Text>
+                            </View>
+                        ) : (
+                            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+                                {callLogs.map((c, i) => {
+                                    const isOut = c.direction === 'OUTBOUND';
+                                    const isMissed = c.status === 'MISSED' || c.status === 'REJECTED';
+                                    const dur = c.duration > 0 ? `${Math.floor(c.duration / 60)}m ${c.duration % 60}s` : isMissed ? 'Missed' : 'No answer';
+                                    const dateHeader = formatDateLabel(c.createdAt);
+                                    const prevDate = i > 0 ? formatDateLabel(callLogs[i - 1].createdAt) : null;
+                                    const showHeader = prevDate !== dateHeader;
+
+                                    return (
+                                        <View key={c.id || i}>
+                                            {showHeader && (
+                                                <View style={[styles.historyDateChip, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : '#F3F4F6' }]}>
+                                                    <Text style={[styles.historyDateText, { color: isDarkMode ? '#8696a0' : '#6B7280' }]}>{dateHeader}</Text>
+                                                </View>
+                                            )}
+                                            <View style={[styles.historyItemRow, { borderBottomColor: isDarkMode ? 'rgba(255,255,255,0.05)' : '#F3F4F6' }]}>
+                                                <View style={[styles.historyIcon, { backgroundColor: isMissed ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)' }]}>
+                                                    <Icon 
+                                                        name={isMissed ? "phone-missed" : isOut ? "phone-outgoing" : "phone-incoming"} 
+                                                        size={18} 
+                                                        color={isMissed ? "#EF4444" : "#10B981"} 
+                                                    />
+                                                </View>
+                                                <View style={{ flex: 1, marginLeft: 12 }}>
+                                                    <Text style={[styles.historyItemTitle, { color: isDarkMode ? '#FFFFFF' : '#111827' }]}>
+                                                        {isMissed ? 'Missed WhatsApp Call' : isOut ? 'Outgoing WhatsApp Call' : 'Incoming WhatsApp Call'}
+                                                    </Text>
+                                                    <Text style={[styles.historyItemSub, { color: isMissed ? '#EF4444' : (isDarkMode ? '#8696a0' : '#6B7280') }]}>
+                                                        {dur} • {new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </Text>
+                                                </View>
+                                                <TouchableOpacity 
+                                                    style={[styles.historyCallBtn, { backgroundColor: isDarkMode ? 'rgba(37,211,102,0.15)' : '#E8F5E9' }]}
+                                                    onPress={() => {
+                                                        setShowCallHistoryModal(false);
+                                                        handleStartCall();
+                                                    }}
+                                                >
+                                                    <Icon name="phone" size={16} color="#25D366" />
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    );
+                                })}
+                            </ScrollView>
+                        )}
                     </View>
                 </TouchableOpacity>
             </Modal>
@@ -848,5 +1066,117 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 14,
         fontWeight: 'bold'
+    },
+    headerBadge: {
+        position: 'absolute',
+        top: 2,
+        right: 2,
+        backgroundColor: '#25D366',
+        borderRadius: 8,
+        minWidth: 16,
+        height: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 3
+    },
+    headerBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 9,
+        fontWeight: 'bold'
+    },
+    callEventRow: {
+        alignItems: 'center',
+        marginVertical: 6,
+        paddingHorizontal: 12
+    },
+    callEventBubble: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderRadius: 14,
+        borderWidth: 1,
+        width: '100%',
+        maxWidth: width * 0.92,
+        elevation: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 2
+    },
+    callIconWrap: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center'
+    },
+    callTitleText: {
+        fontSize: 14,
+        fontWeight: '700'
+    },
+    callSubText: {
+        fontSize: 12,
+        marginTop: 2
+    },
+    callBackBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 16,
+        gap: 4
+    },
+    callBackText: {
+        color: '#25D366',
+        fontSize: 12,
+        fontWeight: '700'
+    },
+    callHistorySheet: {
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        padding: 16,
+        maxHeight: '75%',
+        width: '100%'
+    },
+    historyDateChip: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 6,
+        alignSelf: 'center',
+        marginVertical: 8
+    },
+    historyDateText: {
+        fontSize: 11,
+        fontWeight: '700'
+    },
+    historyItemRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        borderBottomWidth: StyleSheet.hairlineWidth
+    },
+    historyIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center'
+    },
+    historyItemTitle: {
+        fontSize: 14,
+        fontWeight: '600'
+    },
+    historyItemSub: {
+        fontSize: 12,
+        marginTop: 2
+    },
+    historyCallBtn: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: 'rgba(37,211,102,0.12)',
+        justifyContent: 'center',
+        alignItems: 'center'
     }
 });

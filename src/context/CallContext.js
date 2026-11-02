@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 import { io } from 'socket.io-client';
 import api from '../services/api';
 import { RTCPeerConnection, RTCSessionDescription, mediaDevices } from 'react-native-webrtc';
@@ -18,6 +19,33 @@ const ICE_SERVERS = [
     { urls: 'stun:global.stun.twilio.com:3478' }
 ];
 
+export const saveCallLog = async (logEntry) => {
+    try {
+        const phone = logEntry?.phone || logEntry?.from;
+        const cleanPhone = String(phone || '').replace(/[^0-9]/g, '');
+        if (!cleanPhone) return;
+        const key = `@wa_call_history_${cleanPhone}`;
+        const existing = await AsyncStorage.getItem(key);
+        const list = existing ? JSON.parse(existing) : [];
+        const fullEntry = {
+            id: 'call_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+            type: 'CALL_EVENT',
+            phone: cleanPhone,
+            leadName: logEntry.leadName || 'Student',
+            direction: logEntry.direction || (logEntry.isOutbound ? 'OUTBOUND' : 'INBOUND'),
+            status: logEntry.status || 'COMPLETED',
+            duration: logEntry.duration || 0,
+            createdAt: logEntry.createdAt || new Date().toISOString()
+        };
+        list.unshift(fullEntry);
+        await AsyncStorage.setItem(key, JSON.stringify(list.slice(0, 60)));
+        DeviceEventEmitter.emit('new_call_history_event', fullEntry);
+        return fullEntry;
+    } catch (e) {
+        console.log("Error saving call history:", e?.message);
+    }
+};
+
 export const CallProvider = ({ children }) => {
     const { userToken, userInfo, updateUserInfo } = useContext(AuthContext);
     const [socket, setSocket] = useState(null);
@@ -31,6 +59,16 @@ export const CallProvider = ({ children }) => {
     const pcRef = useRef(null);
     const localStreamRef = useRef(null);
     const outboundRingingTimeoutRef = useRef(null);
+    const activeCallRef = useRef(null);
+    const incomingCallRef = useRef(null);
+
+    useEffect(() => {
+        activeCallRef.current = activeCall;
+    }, [activeCall]);
+
+    useEffect(() => {
+        incomingCallRef.current = incomingCall;
+    }, [incomingCall]);
 
     // Sync agent status from userInfo on mount
     useEffect(() => {
@@ -65,7 +103,7 @@ export const CallProvider = ({ children }) => {
         });
 
         return () => unsubscribe();
-    }, [userToken, userInfo?.id]);
+    }, [userToken, userInfo]);
 
     // Socket Initialization
     useEffect(() => {
@@ -114,7 +152,8 @@ export const CallProvider = ({ children }) => {
         return () => {
             if (newSocket) newSocket.disconnect();
         };
-    }, [userToken]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [userToken, userInfo, agentStatus]);
 
     // Socket WhatsApp Call Event Listeners
     useEffect(() => {
@@ -161,28 +200,35 @@ export const CallProvider = ({ children }) => {
         };
 
         const handleCallDisconnected = (data) => {
-            if (incomingCall && incomingCall.callId === data.callId) {
+            console.log("Mobile: Call disconnected socket event received:", data);
+            const currentIncoming = incomingCallRef.current || incomingCall;
+            if (currentIncoming) {
+                saveCallLog({
+                    phone: currentIncoming.from,
+                    leadName: currentIncoming.leadName,
+                    isOutbound: false,
+                    status: 'MISSED',
+                    duration: 0,
+                    createdAt: new Date().toISOString()
+                });
                 stopRinging();
-            } else if (activeCall && activeCall.callId === data.callId) {
-                endCall();
             }
+            endCall();
         };
 
-        // Outbound call status events
+        // Outbound call status events from Meta
         const handleOutboundStatus = (data) => {
-            console.log("Mobile: Outbound Call Status:", data);
+            console.log("Mobile: WhatsApp Call Status Event:", data);
             if (!data?.status) return;
             const status = String(data.status).toUpperCase();
 
             if (status === 'RINGING') {
                 setActiveCall(prev => prev ? { ...prev, status: prev.status === 'CONNECTED' ? 'CONNECTED' : 'RINGING' } : null);
-            } else if (status === 'REJECTED' || status === 'FAILED') {
+            } else if (['REJECTED', 'FAILED', 'TERMINATED', 'DISCONNECTED', 'ENDED', 'CANCELLED', 'HANGUP', 'BUSY', 'COMPLETED'].includes(status)) {
+                console.log(`Mobile: WhatsApp call reached terminal status '${status}'. Ending call immediately.`);
                 if (outboundRingingTimeoutRef.current) clearTimeout(outboundRingingTimeoutRef.current);
                 endCall();
-            } else if (status === 'TERMINATED') {
-                if (outboundRingingTimeoutRef.current) clearTimeout(outboundRingingTimeoutRef.current);
-                endCall();
-            } else if (status === 'ACCEPTED' || status === 'IN_PROGRESS' || status === 'CONNECTED') {
+            } else if (['ACCEPTED', 'IN_PROGRESS', 'CONNECTED'].includes(status)) {
                 if (outboundRingingTimeoutRef.current) clearTimeout(outboundRingingTimeoutRef.current);
                 setActiveCall(prev => prev ? { ...prev, status: 'CONNECTED' } : null);
             }
@@ -203,18 +249,41 @@ export const CallProvider = ({ children }) => {
         socket.on('incoming_wa_call', handleIncomingCall);
         socket.on('whatsapp_call_answered_by_other', handleCallAnsweredByOther);
         socket.on('whatsapp_call_disconnected', handleCallDisconnected);
-        socket.on('whatsapp_call_status', handleOutboundStatus);
-        socket.on('whatsapp_outbound_answer', handleOutboundAnswer);
         socket.on('whatsapp_call_end', handleCallDisconnected);
+        socket.on('whatsapp_call_ended', handleCallDisconnected);
+        socket.on('whatsapp_call_terminated', handleCallDisconnected);
+        socket.on('whatsapp_call_hangup', handleCallDisconnected);
+        socket.on('whatsapp_call_completed', handleCallDisconnected);
+        socket.on('whatsapp_call_rejected', handleCallDisconnected);
+        socket.on('call_ended', handleCallDisconnected);
+        socket.on('call_disconnected', handleCallDisconnected);
+        socket.on('call_terminated', handleCallDisconnected);
+        socket.on('call_completed', handleCallDisconnected);
+        socket.on('call_hangup', handleCallDisconnected);
+        socket.on('whatsapp_call_status', handleOutboundStatus);
+        socket.on('call_status', handleOutboundStatus);
+        socket.on('whatsapp_outbound_answer', handleOutboundAnswer);
 
         return () => {
             socket.off('incoming_wa_call', handleIncomingCall);
             socket.off('whatsapp_call_answered_by_other', handleCallAnsweredByOther);
             socket.off('whatsapp_call_disconnected', handleCallDisconnected);
-            socket.off('whatsapp_call_status', handleOutboundStatus);
-            socket.off('whatsapp_outbound_answer', handleOutboundAnswer);
             socket.off('whatsapp_call_end', handleCallDisconnected);
+            socket.off('whatsapp_call_ended', handleCallDisconnected);
+            socket.off('whatsapp_call_terminated', handleCallDisconnected);
+            socket.off('whatsapp_call_hangup', handleCallDisconnected);
+            socket.off('whatsapp_call_completed', handleCallDisconnected);
+            socket.off('whatsapp_call_rejected', handleCallDisconnected);
+            socket.off('call_ended', handleCallDisconnected);
+            socket.off('call_disconnected', handleCallDisconnected);
+            socket.off('call_terminated', handleCallDisconnected);
+            socket.off('call_completed', handleCallDisconnected);
+            socket.off('call_hangup', handleCallDisconnected);
+            socket.off('whatsapp_call_status', handleOutboundStatus);
+            socket.off('call_status', handleOutboundStatus);
+            socket.off('whatsapp_outbound_answer', handleOutboundAnswer);
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [socket, activeCall, incomingCall, userInfo, agentStatus]);
 
     const stopRinging = () => {
@@ -258,6 +327,27 @@ export const CallProvider = ({ children }) => {
 
             pc.ontrack = (event) => {
                 console.log('Mobile: Remote track received from WhatsApp incoming call.');
+                if (event.track) {
+                    event.track.onended = () => {
+                        console.log('Mobile: Remote audio track ended (incoming call), ending call.');
+                        endCall();
+                    };
+                }
+            };
+
+            pc.onconnectionstatechange = () => {
+                console.log('Mobile: Inbound WebRTC connectionState:', pc.connectionState);
+                if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
+                    console.log('Mobile: Remote peer disconnected WebRTC, ending call.');
+                    endCall();
+                }
+            };
+            pc.oniceconnectionstatechange = () => {
+                console.log('Mobile: Inbound WebRTC iceConnectionState:', pc.iceConnectionState);
+                if (['disconnected', 'failed', 'closed'].includes(pc.iceConnectionState)) {
+                    console.log('Mobile: ICE disconnected/failed, ending call.');
+                    endCall();
+                }
             };
 
             await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerSdp }));
@@ -312,6 +402,27 @@ export const CallProvider = ({ children }) => {
 
             pc.ontrack = (event) => {
                 console.log("Mobile: Remote track received for outbound call.");
+                if (event.track) {
+                    event.track.onended = () => {
+                        console.log("Mobile: Remote audio track ended (outbound call), ending call.");
+                        endCall();
+                    };
+                }
+            };
+
+            pc.onconnectionstatechange = () => {
+                console.log("Mobile: Outbound WebRTC connectionState:", pc.connectionState);
+                if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
+                    console.log("Mobile: Remote peer disconnected WebRTC, ending call.");
+                    endCall();
+                }
+            };
+            pc.oniceconnectionstatechange = () => {
+                console.log("Mobile: Outbound WebRTC iceConnectionState:", pc.iceConnectionState);
+                if (['disconnected', 'failed', 'closed'].includes(pc.iceConnectionState)) {
+                    console.log("Mobile: ICE disconnected/failed, ending call.");
+                    endCall();
+                }
             };
 
             const callObj = {
@@ -382,6 +493,16 @@ export const CallProvider = ({ children }) => {
 
     // Reject Inbound Call
     const rejectCall = async (callId) => {
+        if (incomingCall) {
+            saveCallLog({
+                phone: incomingCall.from,
+                leadName: incomingCall.leadName,
+                isOutbound: false,
+                status: 'REJECTED',
+                duration: 0,
+                createdAt: new Date().toISOString()
+            });
+        }
         stopRinging();
         try {
             await api.post('/admin/whatsapp-call/reject', { 
@@ -402,26 +523,36 @@ export const CallProvider = ({ children }) => {
             outboundRingingTimeoutRef.current = null;
         }
 
-        if (activeCall) {
+        const currActive = activeCallRef.current || activeCall;
+        if (currActive) {
+            const duration = currActive.startTime ? Math.floor((new Date() - currActive.startTime) / 1000) : 0;
+            saveCallLog({
+                phone: currActive.from,
+                leadName: currActive.leadName,
+                isOutbound: Boolean(currActive.isOutbound),
+                status: currActive.status === 'CONNECTED' ? 'COMPLETED' : 'MISSED',
+                duration,
+                createdAt: currActive.startTime ? new Date(currActive.startTime).toISOString() : new Date().toISOString()
+            });
+
             try {
-                const duration = activeCall.startTime ? Math.floor((new Date() - activeCall.startTime) / 1000) : 0;
                 await api.post('/admin/whatsapp-call/terminate', {
-                    callId: activeCall.callId,
-                    businessType: activeCall.businessType,
-                    receivingWaNumId: activeCall.receivingWaNumId,
-                    leadPhone: activeCall.from,
+                    callId: currActive.callId,
+                    businessType: currActive.businessType,
+                    receivingWaNumId: currActive.receivingWaNumId,
+                    leadPhone: currActive.from,
                     duration
                 }).catch(() => {});
             } catch (err) {
                 console.error("Mobile: Error terminating call on backend:", err);
             }
 
-            if (activeCall.peerConnection) {
-                try { activeCall.peerConnection.close(); } catch (e) {}
+            if (currActive.peerConnection) {
+                try { currActive.peerConnection.close(); } catch (e) {}
             }
-            if (activeCall.localStream) {
+            if (currActive.localStream) {
                 try {
-                    activeCall.localStream.getTracks().forEach(track => track.stop());
+                    currActive.localStream.getTracks().forEach(track => track.stop());
                 } catch (e) {}
             }
         }
@@ -437,6 +568,7 @@ export const CallProvider = ({ children }) => {
             localStreamRef.current = null;
         }
         
+        activeCallRef.current = null;
         setActiveCall(null);
         stopRinging();
     };
