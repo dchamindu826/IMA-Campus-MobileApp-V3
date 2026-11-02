@@ -37,48 +37,49 @@ export default function WhatsAppChatScreen({ route, navigation }) {
     const [playingAudioId, setPlayingAudioId] = useState(null);
     const [audioUrl, setAudioUrl] = useState(null);
 
-    // Modals
+    // Modals & Quoted Reply
     const [showQuickReplies, setShowQuickReplies] = useState(false);
     const [quickReplies, setQuickReplies] = useState([]);
     const [showLeadDetails, setShowLeadDetails] = useState(false);
     const [callLogs, setCallLogs] = useState([]);
     const [showCallHistoryModal, setShowCallHistoryModal] = useState(false);
+    const [replyingTo, setReplyingTo] = useState(null);
 
     const flatListRef = useRef(null);
 
     const theme = useMemo(() => isDarkMode ? {
-        headerBg: '#881337',
-        bg: '#0F172A',
-        bubbleIn: '#1E293B',
+        headerBg: '#1f2c34',
+        bg: '#0b141a',
+        bubbleIn: '#202c33',
         bubbleOut: '#005c4b',
-        textIn: '#F8FAFC',
-        textOut: '#F8FAFC',
-        timeIn: '#94A3B8',
-        timeOut: '#94A3B8',
-        inputBarBg: '#1E293B',
-        inputBoxBg: '#334155',
-        inputText: '#F8FAFC',
-        iconColor: '#94A3B8',
-        sendBtn: '#EF4444',
-        dateChipBg: 'rgba(15, 23, 42, 0.92)',
-        dateChipText: '#94A3B8',
+        textIn: '#e9edef',
+        textOut: '#e9edef',
+        timeIn: '#8696a0',
+        timeOut: '#8696a0',
+        inputBarBg: '#1f2c34',
+        inputBoxBg: '#2a3942',
+        inputText: '#e9edef',
+        iconColor: '#8696a0',
+        sendBtn: '#00a884',
+        dateChipBg: 'rgba(17, 27, 33, 0.92)',
+        dateChipText: '#8696a0',
         doodleImg: require('../assets/whatsapp-bg-dark.png')
     } : {
-        headerBg: '#D32F2F',
-        bg: '#F8FAFC',
-        bubbleIn: '#FFFFFF',
+        headerBg: '#008069',
+        bg: '#efeae2',
+        bubbleIn: '#ffffff',
         bubbleOut: '#d9fdd3',
-        textIn: '#0F172A',
-        textOut: '#0F172A',
-        timeIn: '#64748B',
-        timeOut: '#64748B',
-        inputBarBg: '#F1F5F9',
-        inputBoxBg: '#FFFFFF',
-        inputText: '#0F172A',
-        iconColor: '#64748B',
-        sendBtn: '#D32F2F',
-        dateChipBg: 'rgba(255, 255, 255, 0.95)',
-        dateChipText: '#64748B',
+        textIn: '#111b21',
+        textOut: '#111b21',
+        timeIn: '#667781',
+        timeOut: '#667781',
+        inputBarBg: '#f0f2f5',
+        inputBoxBg: '#ffffff',
+        inputText: '#111b21',
+        iconColor: '#54656f',
+        sendBtn: '#008069',
+        dateChipBg: 'rgba(255, 255, 255, 0.92)',
+        dateChipText: '#54656f',
         doodleImg: require('../assets/whatsapp-bg-light.png')
     }, [isDarkMode]);
 
@@ -202,20 +203,22 @@ export default function WhatsAppChatScreen({ route, navigation }) {
         return false;
     }, [leadPhone, userInfo?.firstName]);
 
-    // Send Message
+    // Send Message with Quoted Reply support
     const handleSendMessage = async (textToSend) => {
         const text = textToSend || inputText;
         if (!text || !text.trim() || sending) return;
 
+        const currentReply = replyingTo;
         setSending(true);
         setInputText('');
+        setReplyingTo(null);
 
         try {
             const endpoint = crmType === 'FREE_SEMINAR'
                 ? '/coordinator-crm/messages'
                 : '/after-seminar-crm/messages';
 
-            // Optimistic local update
+            // Optimistic local update with quoted reply box
             const tempMsg = {
                 id: Date.now(),
                 leadId,
@@ -223,15 +226,34 @@ export default function WhatsAppChatScreen({ route, navigation }) {
                 direction: 'OUTBOUND',
                 senderType: 'COORDINATOR',
                 createdAt: new Date().toISOString(),
-                isPending: true
+                isPending: true,
+                quotedMessage: currentReply ? {
+                    id: currentReply.id,
+                    message: currentReply.message,
+                    senderName: currentReply.senderName
+                } : null,
+                replyToMessageId: currentReply?.id || null
             };
             setMessages(prev => [...prev, tempMsg]);
 
-            const res = await api.post(endpoint, {
+            const payload = {
                 leadId,
                 message: text.trim(),
                 senderName: userInfo?.firstName || 'Staff'
-            });
+            };
+
+            if (currentReply) {
+                payload.replyToMessageId = currentReply.id;
+                payload.replyToText = currentReply.message;
+                payload.replyToSender = currentReply.senderName;
+                payload.quotedMessage = {
+                    id: currentReply.id,
+                    message: currentReply.message,
+                    senderName: currentReply.senderName
+                };
+            }
+
+            const res = await api.post(endpoint, payload);
 
             if (res.data?.success || res.data?.message) {
                 fetchMessages();
@@ -345,6 +367,25 @@ export default function WhatsAppChatScreen({ route, navigation }) {
         const isImage = Boolean(item.mediaType && item.mediaType.includes('image')) || Boolean(item.mediaUrl && item.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)$/i));
         const isDoc = Boolean(item.mediaUrl && !isAudio && !isImage);
 
+        // Extract quoted / replied message
+        const quoted = item.quotedMessage 
+            || item.replyToMessage 
+            || item.replyTo 
+            || (item.replyToMessageId ? messages.find(m => String(m.id) === String(item.replyToMessageId)) : null)
+            || (item.contextInfo?.quotedMessage ? { 
+                message: item.contextInfo.quotedMessage.conversation || item.contextInfo.quotedMessage.extendedTextMessage?.text,
+                senderName: item.contextInfo.participant ? 'Student' : 'Staff'
+            } : null);
+
+        const onStartReply = () => {
+            setReplyingTo({
+                id: item.id,
+                message: item.message || (isAudio ? 'Voice Note' : isImage ? 'Photo' : 'Attachment'),
+                senderName: isOutbound ? 'You' : leadName,
+                isOutbound
+            });
+        };
+
         return (
             <View key={item.id || index}>
                 {showDate && (
@@ -358,12 +399,57 @@ export default function WhatsAppChatScreen({ route, navigation }) {
                 )}
 
                 <View style={[styles.bubbleRow, isOutbound ? styles.bubbleRowOut : styles.bubbleRowIn]}>
-                    <View style={[
-                        styles.bubble, 
-                        isOutbound 
-                            ? { backgroundColor: theme.bubbleOut, borderTopRightRadius: 2, borderBottomRightRadius: 10, borderBottomLeftRadius: 10, borderTopLeftRadius: 10 } 
-                            : { backgroundColor: theme.bubbleIn, borderTopLeftRadius: 2, borderBottomLeftRadius: 10, borderBottomRightRadius: 10, borderTopRightRadius: 10 }
-                    ]}>
+                    {/* Reply Icon for Inbound */}
+                    {!isOutbound && (
+                        <TouchableOpacity 
+                            style={styles.bubbleReplyBtn}
+                            onPress={onStartReply}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                            <Icon name="reply" size={17} color={theme.iconColor} />
+                        </TouchableOpacity>
+                    )}
+
+                    <TouchableOpacity 
+                        activeOpacity={0.9}
+                        onLongPress={onStartReply}
+                        style={[
+                            styles.bubble, 
+                            isOutbound 
+                                ? { backgroundColor: theme.bubbleOut, borderTopRightRadius: 2, borderBottomRightRadius: 10, borderBottomLeftRadius: 10, borderTopLeftRadius: 10 } 
+                                : { backgroundColor: theme.bubbleIn, borderTopLeftRadius: 2, borderBottomLeftRadius: 10, borderBottomRightRadius: 10, borderTopRightRadius: 10 }
+                        ]}
+                    >
+                        {/* WhatsApp Quoted Reply Preview Box */}
+                        {quoted && (
+                            <TouchableOpacity 
+                                style={[
+                                    styles.quotedBox,
+                                    {
+                                        backgroundColor: isOutbound 
+                                            ? (isDarkMode ? 'rgba(0, 0, 0, 0.28)' : 'rgba(0, 0, 0, 0.06)') 
+                                            : (isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)'),
+                                        borderLeftColor: isOutbound ? '#25D366' : '#53bdeb'
+                                    }
+                                ]}
+                                activeOpacity={0.8}
+                                onPress={() => {
+                                    if (quoted.id) {
+                                        const targetIdx = mergedFeed.findIndex(m => String(m.id) === String(quoted.id));
+                                        if (targetIdx >= 0 && flatListRef.current) {
+                                            flatListRef.current.scrollToIndex({ index: targetIdx, animated: true, viewPosition: 0.5 });
+                                        }
+                                    }
+                                }}
+                            >
+                                <Text style={[styles.quotedSender, { color: isOutbound ? '#25D366' : (isDarkMode ? '#53bdeb' : '#008069') }]}>
+                                    {quoted.senderName || (quoted.direction === 'OUTBOUND' ? 'You' : leadName)}
+                                </Text>
+                                <Text style={[styles.quotedSnippet, { color: isOutbound ? theme.timeOut : theme.timeIn }]} numberOfLines={2}>
+                                    {quoted.message || (typeof quoted === 'string' ? quoted : 'Original message')}
+                                </Text>
+                            </TouchableOpacity>
+                        )}
                         
                         {/* Audio Voice Note Player */}
                         {isAudio && (
@@ -430,7 +516,18 @@ export default function WhatsAppChatScreen({ route, navigation }) {
                                 />
                             )}
                         </View>
-                    </View>
+                    </TouchableOpacity>
+
+                    {/* Reply Icon for Outbound */}
+                    {isOutbound && (
+                        <TouchableOpacity 
+                            style={styles.bubbleReplyBtn}
+                            onPress={onStartReply}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                            <Icon name="reply" size={17} color={theme.iconColor} />
+                        </TouchableOpacity>
+                    )}
                 </View>
             </View>
         );
@@ -546,6 +643,30 @@ export default function WhatsAppChatScreen({ route, navigation }) {
                         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
                         onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
                     />
+                )}
+
+                {/* Docked WhatsApp Quoted Reply Preview Bar */}
+                {replyingTo && (
+                    <View style={[styles.replyPreviewBar, { backgroundColor: isDarkMode ? '#1f2c34' : '#F0F2F5', borderLeftColor: '#25D366' }]}>
+                        <View style={{ flex: 1, paddingRight: 8 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Icon name="reply" size={14} color="#25D366" style={{ marginRight: 4 }} />
+                                <Text style={styles.replyPreviewSender}>
+                                    Replying to {replyingTo.senderName}
+                                </Text>
+                            </View>
+                            <Text style={[styles.replyPreviewSnippet, { color: isDarkMode ? '#8696a0' : '#667781' }]} numberOfLines={1}>
+                                {replyingTo.message}
+                            </Text>
+                        </View>
+                        <TouchableOpacity 
+                            onPress={() => setReplyingTo(null)}
+                            style={styles.replyCloseBtn}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                            <Icon name="close" size={18} color={isDarkMode ? '#8696a0' : '#667781'} />
+                        </TouchableOpacity>
+                    </View>
                 )}
 
                 {/* Bottom WhatsApp Message Input Bar */}
@@ -1178,5 +1299,49 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(37,211,102,0.12)',
         justifyContent: 'center',
         alignItems: 'center'
+    },
+    quotedBox: {
+        borderLeftWidth: 4,
+        borderRadius: 6,
+        paddingHorizontal: 8,
+        paddingVertical: 5,
+        marginBottom: 6,
+        minWidth: 160
+    },
+    quotedSender: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        marginBottom: 2
+    },
+    quotedSnippet: {
+        fontSize: 12,
+        lineHeight: 16
+    },
+    bubbleReplyBtn: {
+        alignSelf: 'center',
+        padding: 6,
+        marginHorizontal: 4,
+        opacity: 0.6
+    },
+    replyPreviewBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderLeftWidth: 4,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: 'rgba(0,0,0,0.06)'
+    },
+    replyPreviewSender: {
+        color: '#25D366',
+        fontSize: 12,
+        fontWeight: 'bold'
+    },
+    replyPreviewSnippet: {
+        fontSize: 12,
+        marginTop: 2
+    },
+    replyCloseBtn: {
+        padding: 4
     }
 });

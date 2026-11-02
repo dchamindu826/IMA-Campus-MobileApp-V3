@@ -66,23 +66,25 @@ const StaffDashboardScreen = ({ navigation }) => {
     const currentStatusConfig = STATUS_OPTIONS.find(s => s.value === agentStatus) || STATUS_OPTIONS[3];
 
     const theme = isDarkMode ? {
-        bg: '#0F172A',
-        cardBg: '#1E293B',
+        bg: '#0b141a',
+        cardBg: '#111b21',
         cardBorder: 'rgba(255, 255, 255, 0.08)',
-        textPrimary: '#F8FAFC',
-        textSecondary: '#94A3B8',
-        accent: '#EF4444',
-        headerGrad: ['#881337', '#1E293B'],
-        subCard: '#334155'
+        textPrimary: '#e9edef',
+        textSecondary: '#8696a0',
+        accent: '#25D366',
+        headerGrad: ['#1f2c34', '#111b21'],
+        subCard: '#1f2c34',
+        statusBar: '#1f2c34'
     } : {
-        bg: '#F8FAFC',
+        bg: '#F0F2F5',
         cardBg: '#FFFFFF',
-        cardBorder: 'rgba(0, 0, 0, 0.06)',
-        textPrimary: '#0F172A',
-        textSecondary: '#64748B',
-        accent: '#D32F2F',
-        headerGrad: [COLORS.primary, '#9A0007'],
-        subCard: '#FEF2F2'
+        cardBorder: '#E9EDEF',
+        textPrimary: '#111827',
+        textSecondary: '#667781',
+        accent: '#008069',
+        headerGrad: ['#008069', '#075E54'],
+        subCard: '#F0F2F5',
+        statusBar: '#008069'
     };
 
     const roleName = String(userInfo?.role || 'Staff').replace(/_/g, ' ');
@@ -91,7 +93,7 @@ const StaffDashboardScreen = ({ navigation }) => {
         <View style={[styles.container, { backgroundColor: theme.bg }]}>
             <StatusBar 
                 barStyle="light-content" 
-                backgroundColor={isDarkMode ? '#881337' : '#9A0007'} 
+                backgroundColor={theme.statusBar} 
             />
 
             {/* Top Navigation Bar */}
@@ -132,10 +134,10 @@ const StaffDashboardScreen = ({ navigation }) => {
                         {/* Logout Button */}
                         <TouchableOpacity 
                             onPress={logout} 
-                            style={[styles.iconButton, { backgroundColor: 'rgba(239, 68, 68, 0.25)' }]}
+                            style={[styles.iconButton, { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.2)' }]}
                             activeOpacity={0.8}
                         >
-                            <Icon name="logout" size={20} color="#F87171" />
+                            <Icon name="logout" size={20} color="#FFFFFF" />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -234,8 +236,8 @@ const StaffDashboardScreen = ({ navigation }) => {
                                              {biz.medium || 'Sinhala'} • {biz.category || 'Academic'}
                                         </Text>
                                     </View>
-                                    <View style={[styles.activeTag, { backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2', borderColor: isDarkMode ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5' }]}>
-                                        <Text style={[styles.activeTagText, { color: theme.accent }]}>LIVE CRM</Text>
+                                    <View style={[styles.activeTag, { backgroundColor: isDarkMode ? 'rgba(0, 168, 132, 0.15)' : '#E7FCE3', borderColor: isDarkMode ? 'rgba(0, 168, 132, 0.3)' : '#A7F3D0' }]}>
+                                        <Text style={[styles.activeTagText, { color: isDarkMode ? '#00a884' : '#008069' }]}>LIVE CRM</Text>
                                     </View>
                                 </View>
 
@@ -243,9 +245,9 @@ const StaffDashboardScreen = ({ navigation }) => {
 
                                 {/* CRM Action Buttons for this Business */}
                                 <View style={styles.crmButtonsContainer}>
-                                    {/* 1. Free Seminar CRM (Primary Brand Button) */}
+                                    {/* 1. Free Seminar CRM (Authentic WhatsApp Primary Green Button) */}
                                     <TouchableOpacity 
-                                        style={[styles.crmActionBtn, { backgroundColor: isDarkMode ? '#DC2626' : '#D32F2F' }]}
+                                        style={[styles.crmActionBtn, { backgroundColor: isDarkMode ? '#00a884' : '#008069' }]}
                                         activeOpacity={0.85}
                                         onPress={() => navigation.navigate('CrmContacts', {
                                             businessId: biz.id,
@@ -264,14 +266,14 @@ const StaffDashboardScreen = ({ navigation }) => {
                                         <Icon name="chevron-right" size={22} color="#FFFFFF" style={{ opacity: 0.9 }} />
                                     </TouchableOpacity>
 
-                                    {/* 2. After Seminar CRM (Cohesive Secondary Brand Card) */}
+                                    {/* 2. After Seminar CRM (WhatsApp Teal Outline/Subtle Button) */}
                                     <TouchableOpacity 
                                         style={[
                                             styles.crmActionBtn, 
                                             { 
-                                                backgroundColor: isDarkMode ? '#334155' : '#FFFFFF',
+                                                backgroundColor: isDarkMode ? '#1f2c34' : '#FFFFFF',
                                                 borderWidth: 1.5,
-                                                borderColor: isDarkMode ? 'rgba(239, 68, 68, 0.35)' : '#FCA5A5'
+                                                borderColor: isDarkMode ? 'rgba(0, 168, 132, 0.4)' : '#008069'
                                             }
                                         ]}
                                         activeOpacity={0.85}
@@ -282,8 +284,8 @@ const StaffDashboardScreen = ({ navigation }) => {
                                             isDarkMode
                                         })}
                                     >
-                                        <View style={[styles.crmBtnIcon, { backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2' }]}>
-                                            <Icon name="message-text-outline" size={20} color={isDarkMode ? '#F87171' : '#D32F2F'} />
+                                        <View style={[styles.crmBtnIcon, { backgroundColor: isDarkMode ? 'rgba(0, 168, 132, 0.2)' : '#E7FCE3' }]}>
+                                            <Icon name="message-text-outline" size={20} color={isDarkMode ? '#00a884' : '#008069'} />
                                         </View>
                                         <View style={styles.crmBtnTextCol}>
                                             <Text style={[styles.crmBtnTitle, { color: theme.textPrimary }]}>After Sem CRM</Text>

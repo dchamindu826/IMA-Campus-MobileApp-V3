@@ -104,35 +104,35 @@ export default function CrmContactsScreen({ route, navigation }) {
         return leads;
     }, [leads, selectedCategory]);
 
-    // Unified 3-color IMA Campus Red Theme
+    // Authentic WhatsApp Light / Dark Mode Theme
     const theme = useMemo(() => isDarkMode ? {
-        headerBg: '#881337',
-        bg: '#0F172A',
-        tabBarBg: '#1E293B',
-        tabActiveText: '#EF4444',
-        tabInactiveText: '#94A3B8',
-        tabIndicator: '#EF4444',
-        itemBg: '#1E293B',
-        border: 'rgba(255, 255, 255, 0.08)',
-        textPrimary: '#F8FAFC',
-        textSecondary: '#94A3B8',
-        unreadBadge: '#EF4444',
-        searchBg: '#1E293B',
-        callBtnBg: '#334155'
+        headerBg: '#1f2c34',
+        bg: '#0b141a',
+        tabBarBg: '#1f2c34',
+        tabActiveText: '#00a884',
+        tabInactiveText: '#8696a0',
+        tabIndicator: '#00a884',
+        itemBg: '#111b21',
+        border: 'rgba(255, 255, 255, 0.06)',
+        textPrimary: '#e9edef',
+        textSecondary: '#8696a0',
+        unreadBadge: '#25D366',
+        searchBg: '#111b21',
+        callBtnBg: '#005c4b'
     } : {
-        headerBg: '#D32F2F',
-        bg: '#F8FAFC',
-        tabBarBg: '#D32F2F',
+        headerBg: '#008069',
+        bg: '#FFFFFF',
+        tabBarBg: '#008069',
         tabActiveText: '#FFFFFF',
         tabInactiveText: 'rgba(255, 255, 255, 0.75)',
         tabIndicator: '#FFFFFF',
         itemBg: '#FFFFFF',
-        border: '#E2E8F0',
-        textPrimary: '#0F172A',
-        textSecondary: '#64748B',
-        unreadBadge: '#D32F2F',
-        searchBg: '#F1F5F9',
-        callBtnBg: '#FEF2F2'
+        border: '#E9EDEF',
+        textPrimary: '#111827',
+        textSecondary: '#667781',
+        unreadBadge: '#25D366',
+        searchBg: '#F0F2F5',
+        callBtnBg: '#E8F5E9'
     }, [isDarkMode]);
 
     const fetchLeads = useCallback(async (isSilent = false) => {
@@ -243,14 +243,13 @@ export default function CrmContactsScreen({ route, navigation }) {
         return (
             <TouchableOpacity 
                 style={[
-                    styles.contactCard, 
+                    styles.leadRow, 
                     { 
-                        backgroundColor: theme.itemBg, 
-                        borderColor: unread > 0 ? theme.unreadBadge : theme.border,
-                        borderWidth: unread > 0 ? 1.5 : 1
+                        backgroundColor: theme.itemBg,
+                        borderBottomColor: theme.border
                     }
                 ]}
-                activeOpacity={0.85}
+                activeOpacity={0.7}
                 onPress={() => navigation.navigate('WhatsAppChat', {
                     lead: item,
                     businessId,
@@ -259,115 +258,97 @@ export default function CrmContactsScreen({ route, navigation }) {
                     isDarkMode
                 })}
             >
-                {/* Top Row: Avatar + Name + Timestamp */}
-                <View style={styles.cardHeaderRow}>
-                    <View style={[styles.avatarWrap, { backgroundColor: avatarPalette.bg, borderColor: avatarPalette.border }]}>
-                        <Text style={[styles.avatarText, { color: avatarPalette.text }]}>{initials}</Text>
+                {/* Circular Avatar */}
+                <View style={[styles.avatarWrap, { backgroundColor: avatarPalette.bg }]}>
+                    <Text style={[styles.avatarText, { color: avatarPalette.text }]}>{initials}</Text>
+                </View>
+
+                {/* Lead Info & Snippet */}
+                <View style={styles.leadContent}>
+                    {/* Top Row: Name + Timestamp */}
+                    <View style={styles.leadTopRow}>
+                        <Text style={[styles.leadName, { color: theme.textPrimary }]} numberOfLines={1}>
+                            {displayName}
+                        </Text>
+                        <Text style={[styles.timeText, { color: unread > 0 ? theme.unreadBadge : theme.textSecondary }]}>
+                            {formatTimestamp(item.updatedAt || item.createdAt)}
+                        </Text>
                     </View>
 
-                    <View style={styles.cardTitleWrap}>
-                        <View style={styles.leadTopRow}>
-                            <Text style={[styles.leadName, { color: theme.textPrimary }]} numberOfLines={1}>
-                                {displayName}
-                            </Text>
-                            <Text style={[styles.timeText, { color: unread > 0 ? theme.unreadBadge : theme.textSecondary }]}>
-                                {formatTimestamp(item.updatedAt || item.createdAt)}
+                    {/* Secondary Row: Batch Pill + Status + Phone */}
+                    {(batchTitle || item.phone) && (
+                        <View style={styles.leadSubRow}>
+                            {batchTitle && (
+                                <View style={[styles.batchPill, { backgroundColor: isDarkMode ? '#1F2C34' : '#F0F2F5' }]}>
+                                    <Icon name="school-outline" size={12} color={isDarkMode ? '#00a884' : '#008069'} style={{ marginRight: 3 }} />
+                                    <Text style={[styles.batchPillText, { color: isDarkMode ? '#00a884' : '#008069' }]} numberOfLines={1}>
+                                        {batchTitle}
+                                    </Text>
+                                </View>
+                            )}
+                            {statusTitle && (
+                                <View style={[
+                                    styles.statusMiniTag, 
+                                    { backgroundColor: statusTitle === 'PAID' ? (isDarkMode ? 'rgba(37,211,102,0.15)' : '#E8F5E9') : (isDarkMode ? 'rgba(255,255,255,0.06)' : '#F0F2F5') }
+                                ]}>
+                                    <Text style={[
+                                        styles.statusMiniText, 
+                                        { color: statusTitle === 'PAID' ? '#25D366' : theme.textSecondary }
+                                    ]}>
+                                        {statusTitle}
+                                    </Text>
+                                </View>
+                            )}
+                            {item.phone && displayName !== item.phone && (
+                                <Text style={[styles.leadPhoneText, { color: theme.textSecondary }]} numberOfLines={1}>
+                                    {item.phone}
+                                </Text>
+                            )}
+                        </View>
+                    )}
+
+                    {/* Bottom Row: Outbound ticks + Snippet + Right actions */}
+                    <View style={styles.leadBottomRow}>
+                        <View style={styles.snippetRow}>
+                            {isOutbound && (
+                                <Icon 
+                                    name="check-all" 
+                                    size={15} 
+                                    color="#53bdeb" 
+                                    style={{ marginRight: 4 }} 
+                                />
+                            )}
+                            <Text 
+                                style={[
+                                    styles.snippetText, 
+                                    { 
+                                        color: unread > 0 ? theme.textPrimary : theme.textSecondary,
+                                        fontWeight: unread > 0 ? '600' : '400'
+                                    }
+                                ]} 
+                                numberOfLines={1}
+                            >
+                                {msgText}
                             </Text>
                         </View>
-                        <Text style={[styles.phoneSubText, { color: theme.textSecondary }]}>
-                            {item.phone}
-                        </Text>
-                    </View>
-                </View>
 
-                {/* Categorized Badges (Batch & Status) */}
-                {(batchTitle || statusTitle) && (
-                    <View style={styles.tagRow}>
-                        {batchTitle && (
-                            <View style={[styles.batchTag, { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9', borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#E2E8F0' }]}>
-                                <Icon name="school" size={13} color={isDarkMode ? '#F87171' : '#D32F2F'} style={{ marginRight: 4 }} />
-                                <Text style={[styles.batchTagText, { color: theme.textPrimary }]} numberOfLines={1}>
-                                    {batchTitle}
-                                </Text>
-                            </View>
-                        )}
-                        {statusTitle && (
-                            <View style={[
-                                styles.statusTag, 
-                                { 
-                                    backgroundColor: statusTitle === 'PAID' ? (isDarkMode ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2') : (isDarkMode ? 'rgba(255, 255, 255, 0.05)' : '#F8FAFC'),
-                                    borderColor: statusTitle === 'PAID' ? (isDarkMode ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5') : (isDarkMode ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0')
-                                }
-                            ]}>
-                                <Text style={[
-                                    styles.statusTagText, 
-                                    { color: statusTitle === 'PAID' ? (isDarkMode ? '#F87171' : '#D32F2F') : theme.textSecondary }
-                                ]}>
-                                    {statusTitle}
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-                )}
+                        {/* Right Actions: Unread Badge + WhatsApp Call Button */}
+                        <View style={styles.rowRightActions}>
+                            {unread > 0 && (
+                                <View style={[styles.unreadBadge, { backgroundColor: theme.unreadBadge }]}>
+                                    <Text style={styles.unreadText}>{unread}</Text>
+                                </View>
+                            )}
 
-                {/* Message Snippet Box */}
-                <View style={[styles.snippetContainer, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : '#F8FAFC' }]}>
-                    <View style={styles.snippetRow}>
-                        {isOutbound && (
-                            <Icon name="check-all" size={15} color={isDarkMode ? '#F87171' : '#D32F2F'} style={{ marginRight: 5 }} />
-                        )}
-                        <Text 
-                            style={[
-                                styles.snippetText, 
-                                { 
-                                    color: unread > 0 ? theme.textPrimary : theme.textSecondary, 
-                                    fontWeight: unread > 0 ? '700' : '400' 
-                                }
-                            ]} 
-                            numberOfLines={1}
-                        >
-                            {msgText}
-                        </Text>
-                    </View>
-                </View>
-
-                {/* Card Actions Footer */}
-                <View style={styles.cardFooter}>
-                    <View style={styles.footerLeft}>
-                        {unread > 0 && (
-                            <View style={[styles.unreadBadge, { backgroundColor: theme.unreadBadge }]}>
-                                <Icon name="message-badge" size={12} color="#FFFFFF" style={{ marginRight: 3 }} />
-                                <Text style={styles.unreadText}>{unread} new</Text>
-                            </View>
-                        )}
-                    </View>
-
-                    <View style={styles.footerActions}>
-                        {/* Direct WhatsApp Call */}
-                        <TouchableOpacity 
-                            style={[styles.actionBtn, { backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2' }]}
-                            activeOpacity={0.8}
-                            onPress={() => handleCallLead(item)}
-                        >
-                            <Icon name="phone" size={14} color={isDarkMode ? '#EF4444' : '#D32F2F'} />
-                            <Text style={[styles.actionBtnCallText, { color: isDarkMode ? '#EF4444' : '#D32F2F' }]}>Call</Text>
-                        </TouchableOpacity>
-
-                        {/* Open Chat */}
-                        <TouchableOpacity 
-                            style={[styles.actionBtn, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}
-                            activeOpacity={0.8}
-                            onPress={() => navigation.navigate('WhatsAppChat', {
-                                lead: item,
-                                businessId,
-                                businessName,
-                                crmType,
-                                isDarkMode
-                            })}
-                        >
-                            <Icon name="whatsapp" size={14} color={theme.textPrimary} />
-                            <Text style={[styles.actionBtnChatText, { color: theme.textPrimary }]}>Chat</Text>
-                        </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.quickCallBtn, { backgroundColor: theme.callBtnBg }]}
+                                activeOpacity={0.7}
+                                onPress={() => handleCallLead(item)}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                                <Icon name="phone" size={16} color={isDarkMode ? '#00a884' : '#008069'} />
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </TouchableOpacity>
@@ -457,7 +438,7 @@ export default function CrmContactsScreen({ route, navigation }) {
             </View>
 
             {/* Horizontal Category Filter Pills */}
-            <View style={[styles.categoryBarWrap, { backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC', borderBottomColor: theme.border }]}>
+            <View style={[styles.categoryBarWrap, { backgroundColor: isDarkMode ? '#111b21' : '#FFFFFF', borderBottomColor: theme.border }]}>
                 <ScrollView 
                     horizontal 
                     showsHorizontalScrollIndicator={false}
@@ -471,8 +452,16 @@ export default function CrmContactsScreen({ route, navigation }) {
                                 style={[
                                     styles.categoryChip,
                                     isSel 
-                                        ? { backgroundColor: isDarkMode ? '#EF4444' : '#D32F2F' } 
-                                        : { backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF', borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : '#E2E8F0', borderWidth: 1 }
+                                        ? { 
+                                            backgroundColor: isDarkMode ? '#0A332C' : '#E7FCE3',
+                                            borderColor: isDarkMode ? '#00a884' : '#25D366',
+                                            borderWidth: 1
+                                          } 
+                                        : { 
+                                            backgroundColor: isDarkMode ? '#202C33' : '#F0F2F5', 
+                                            borderColor: isDarkMode ? 'rgba(255,255,255,0.06)' : '#E9EDEF', 
+                                            borderWidth: 1 
+                                          }
                                 ]}
                                 onPress={() => setSelectedCategory(cat.id)}
                                 activeOpacity={0.8}
@@ -480,22 +469,33 @@ export default function CrmContactsScreen({ route, navigation }) {
                                 <Icon 
                                     name={cat.icon || "tag-outline"} 
                                     size={14} 
-                                    color={isSel ? '#FFFFFF' : (isDarkMode ? '#94A3B8' : '#64748B')} 
+                                    color={isSel ? (isDarkMode ? '#00a884' : '#008069') : (isDarkMode ? '#8696a0' : '#54656F')} 
                                     style={{ marginRight: 5 }}
                                 />
                                 <Text style={[
                                     styles.categoryChipText,
-                                    { color: isSel ? '#FFFFFF' : theme.textPrimary, fontWeight: isSel ? '700' : '500' }
+                                    { 
+                                        color: isSel ? (isDarkMode ? '#00a884' : '#008069') : theme.textPrimary, 
+                                        fontWeight: isSel ? '700' : '500' 
+                                    }
                                 ]}>
                                     {cat.label}
                                 </Text>
                                 <View style={[
                                     styles.categoryCountBadge,
-                                    { backgroundColor: isSel ? 'rgba(255,255,255,0.25)' : (cat.isAlert ? '#EF4444' : (isDarkMode ? 'rgba(255,255,255,0.1)' : '#F1F5F9')) }
+                                    { 
+                                        backgroundColor: isSel 
+                                            ? (isDarkMode ? 'rgba(0,168,132,0.2)' : 'rgba(0,128,105,0.15)') 
+                                            : (cat.isAlert ? '#25D366' : (isDarkMode ? 'rgba(255,255,255,0.08)' : '#E9EDEF')) 
+                                    }
                                 ]}>
                                     <Text style={[
                                         styles.categoryCountText,
-                                        { color: isSel ? '#FFFFFF' : (cat.isAlert ? '#FFFFFF' : theme.textSecondary) }
+                                        { 
+                                            color: isSel 
+                                                ? (isDarkMode ? '#00a884' : '#008069') 
+                                                : (cat.isAlert ? '#FFFFFF' : theme.textSecondary) 
+                                        }
                                     ]}>
                                         {cat.count}
                                     </Text>
@@ -642,93 +642,9 @@ const styles = StyleSheet.create({
         fontSize: 11,
         fontWeight: '700',
     },
-    contactCard: {
-        marginHorizontal: 12,
-        marginVertical: 6,
-        padding: 12,
-        borderRadius: 14,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.08,
-        shadowRadius: 3,
-        elevation: 2,
-    },
-    cardHeaderRow: {
+    leadRow: {
         flexDirection: 'row',
         alignItems: 'center',
-    },
-    cardTitleWrap: {
-        flex: 1,
-    },
-    phoneSubText: {
-        fontSize: 12,
-        marginTop: 1,
-    },
-    batchTag: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 6,
-        borderWidth: 1,
-        maxWidth: '65%',
-    },
-    batchTagText: {
-        fontSize: 11,
-        fontWeight: '600',
-    },
-    statusTag: {
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 6,
-        borderWidth: 1,
-    },
-    statusTagText: {
-        fontSize: 11,
-        fontWeight: '700',
-        textTransform: 'uppercase',
-    },
-    snippetContainer: {
-        marginTop: 8,
-        paddingHorizontal: 10,
-        paddingVertical: 7,
-        borderRadius: 8,
-    },
-    cardFooter: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginTop: 10,
-    },
-    footerLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    footerActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    actionBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
-        gap: 5,
-    },
-    actionBtnCallText: {
-        color: '#25D366',
-        fontSize: 12,
-        fontWeight: '700',
-    },
-    actionBtnChatText: {
-        fontSize: 12,
-        fontWeight: '700',
-    },
-    leadItem: {
-        flexDirection: 'row',
         paddingHorizontal: 16,
         paddingVertical: 12,
         borderBottomWidth: StyleSheet.hairlineWidth
@@ -753,7 +669,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 3
+        marginBottom: 2
     },
     leadName: {
         fontSize: 16,
@@ -765,6 +681,38 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '500'
     },
+    leadSubRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 6,
+        marginBottom: 4
+    },
+    batchPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+        maxWidth: 160
+    },
+    batchPillText: {
+        fontSize: 11,
+        fontWeight: '600'
+    },
+    statusMiniTag: {
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4
+    },
+    statusMiniText: {
+        fontSize: 10,
+        fontWeight: '700',
+        textTransform: 'uppercase'
+    },
+    leadPhoneText: {
+        fontSize: 11
+    },
     leadBottomRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -774,13 +722,13 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         flex: 1,
-        marginRight: 10
+        marginRight: 8
     },
     snippetText: {
         fontSize: 13,
         flex: 1
     },
-    leadActions: {
+    rowRightActions: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8
@@ -798,26 +746,12 @@ const styles = StyleSheet.create({
         fontSize: 11,
         fontWeight: 'bold'
     },
-    callBtn: {
-        width: 34,
-        height: 34,
-        borderRadius: 17,
+    quickCallBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
         justifyContent: 'center',
         alignItems: 'center'
-    },
-    tagRow: {
-        flexDirection: 'row',
-        gap: 6,
-        marginTop: 6
-    },
-    miniTag: {
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 6
-    },
-    miniTagText: {
-        fontSize: 10,
-        fontWeight: '600'
     },
     centerContainer: {
         flex: 1,
