@@ -159,23 +159,11 @@ const AppNavigation = () => {
         ) : (
           <>
             {userInfo && userInfo.role && String(userInfo.role).toUpperCase() !== 'STUDENT' && String(userInfo.role).toUpperCase() !== 'USER' ? (
-                <>
-                    <Stack.Screen 
-                        name="StaffDashboard" 
-                        component={StaffDashboardScreen} 
-                        options={{ headerShown: false }} 
-                    />
-                    <Stack.Screen 
-                        name="CrmContacts" 
-                        component={CrmContactsScreen} 
-                        options={{ headerShown: false }} 
-                    />
-                    <Stack.Screen 
-                        name="WhatsAppChat" 
-                        component={WhatsAppChatScreen} 
-                        options={{ headerShown: false }} 
-                    />
-                </>
+                <Stack.Screen 
+                    name="StaffDashboard" 
+                    component={StaffDashboardScreen} 
+                    options={{ headerShown: false }} 
+                />
             ) : (
                 <Stack.Screen 
                     name="MainTabs" 
