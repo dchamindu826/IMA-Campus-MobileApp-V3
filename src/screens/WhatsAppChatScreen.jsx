@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useContext, useMemo, useCallback } 
 import {
     View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
     ImageBackground, Image, ActivityIndicator, Modal, KeyboardAvoidingView,
-    Platform, Dimensions, Alert, StatusBar, DeviceEventEmitter, ScrollView
+    Platform, Dimensions, Alert, StatusBar, DeviceEventEmitter, ScrollView,
+    PanResponder, Animated
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -13,6 +14,93 @@ import { useCall } from '../context/CallContext';
 import { AuthContext } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
+
+// WhatsApp Native Swipe-to-Reply Bubble Component
+const SwipeableMessageBubble = ({ children, onReply, isOutbound }) => {
+    const translateX = useRef(new Animated.Value(0)).current;
+
+    const panResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => false,
+            onMoveShouldSetPanResponder: (evt, gestureState) => {
+                // Only capture rightward swipe (dx > 12) where horizontal move is dominant over vertical move
+                return gestureState.dx > 12 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5;
+            },
+            onPanResponderMove: (evt, gestureState) => {
+                if (gestureState.dx > 0) {
+                    const maxDistance = 75;
+                    const val = gestureState.dx > maxDistance 
+                        ? maxDistance + (gestureState.dx - maxDistance) * 0.25 
+                        : gestureState.dx;
+                    translateX.setValue(val);
+                }
+            },
+            onPanResponderRelease: (evt, gestureState) => {
+                if (gestureState.dx >= 40) {
+                    onReply();
+                }
+                Animated.spring(translateX, {
+                    toValue: 0,
+                    friction: 7,
+                    tension: 80,
+                    useNativeDriver: true
+                }).start();
+            },
+            onPanResponderTerminate: () => {
+                Animated.spring(translateX, {
+                    toValue: 0,
+                    friction: 7,
+                    tension: 80,
+                    useNativeDriver: true
+                }).start();
+            }
+        })
+    ).current;
+
+    const iconOpacity = translateX.interpolate({
+        inputRange: [0, 16, 40],
+        outputRange: [0, 0.5, 1],
+        extrapolate: 'clamp'
+    });
+
+    const iconScale = translateX.interpolate({
+        inputRange: [0, 18, 40],
+        outputRange: [0.3, 0.7, 1],
+        extrapolate: 'clamp'
+    });
+
+    return (
+        <View style={styles.swipeContainer}>
+            {/* Animated WhatsApp Circular Reply Icon behind the bubble */}
+            <Animated.View 
+                pointerEvents="none"
+                style={[
+                    styles.swipeReplyIconWrap,
+                    {
+                        opacity: iconOpacity,
+                        transform: [{ scale: iconScale }]
+                    }
+                ]}
+            >
+                <View style={styles.swipeReplyCircle}>
+                    <Icon name="reply" size={17} color="#FFFFFF" />
+                </View>
+            </Animated.View>
+
+            {/* Sliding Message Bubble */}
+            <Animated.View
+                {...panResponder.panHandlers}
+                style={[
+                    styles.swipeableContent,
+                    isOutbound ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' },
+                    { transform: [{ translateX }] }
+                ]}
+            >
+                {children}
+            </Animated.View>
+        </View>
+    );
+};
 
 export default function WhatsAppChatScreen({ route, navigation }) {
     const insets = useSafeAreaInsets();
@@ -368,18 +456,36 @@ export default function WhatsAppChatScreen({ route, navigation }) {
         const isDoc = Boolean(item.mediaUrl && !isAudio && !isImage);
 
         // Extract quoted / replied message
-        const quoted = item.quotedMessage 
+        const rawQuoted = item.quotedMessage 
             || item.replyToMessage 
             || item.replyTo 
-            || (item.replyToMessageId ? messages.find(m => String(m.id) === String(item.replyToMessageId)) : null)
+            || (item.replyToMessageId ? messages.find(m => String(m.id) === String(item.replyToMessageId) || String(m.whatsappMessageId) === String(item.replyToMessageId)) : null)
             || (item.contextInfo?.quotedMessage ? { 
-                message: item.contextInfo.quotedMessage.conversation || item.contextInfo.quotedMessage.extendedTextMessage?.text,
+                message: item.contextInfo.quotedMessage.conversation || item.contextInfo.quotedMessage.extendedTextMessage?.text || item.contextInfo.quotedMessage.imageMessage?.caption,
                 senderName: item.contextInfo.participant ? 'Student' : 'Staff'
             } : null);
 
+        let quotedInfo = null;
+        if (rawQuoted) {
+            const qMsg = typeof rawQuoted === 'string' ? rawQuoted : (rawQuoted.message || rawQuoted.text || rawQuoted.caption || '');
+            if (qMsg) {
+                quotedInfo = {
+                    id: rawQuoted.id || item.replyToMessageId,
+                    message: qMsg,
+                    senderName: rawQuoted.senderName || (rawQuoted.direction === 'OUTBOUND' || rawQuoted.isOutbound ? 'You' : leadName)
+                };
+            }
+        } else if (item.replyToText) {
+            quotedInfo = {
+                id: item.replyToMessageId,
+                message: item.replyToText,
+                senderName: item.replyToSender || (item.replyToDirection === 'OUTBOUND' ? 'You' : leadName)
+            };
+        }
+
         const onStartReply = () => {
             setReplyingTo({
-                id: item.id,
+                id: item.id || item.whatsappMessageId,
                 message: item.message || (isAudio ? 'Voice Note' : isImage ? 'Photo' : 'Attachment'),
                 senderName: isOutbound ? 'You' : leadName,
                 isOutbound
@@ -398,30 +504,36 @@ export default function WhatsAppChatScreen({ route, navigation }) {
                     </View>
                 )}
 
-                <View style={[styles.bubbleRow, isOutbound ? styles.bubbleRowOut : styles.bubbleRowIn]}>
-                    {/* Reply Icon for Inbound */}
-                    {!isOutbound && (
-                        <TouchableOpacity 
-                            style={styles.bubbleReplyBtn}
-                            onPress={onStartReply}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        >
-                            <Icon name="reply" size={17} color={theme.iconColor} />
-                        </TouchableOpacity>
-                    )}
-
+                <SwipeableMessageBubble 
+                    onReply={onStartReply} 
+                    isOutbound={isOutbound}
+                >
                     <TouchableOpacity 
-                        activeOpacity={0.9}
+                        activeOpacity={0.95}
                         onLongPress={onStartReply}
                         style={[
                             styles.bubble, 
                             isOutbound 
-                                ? { backgroundColor: theme.bubbleOut, borderTopRightRadius: 2, borderBottomRightRadius: 10, borderBottomLeftRadius: 10, borderTopLeftRadius: 10 } 
-                                : { backgroundColor: theme.bubbleIn, borderTopLeftRadius: 2, borderBottomLeftRadius: 10, borderBottomRightRadius: 10, borderTopRightRadius: 10 }
+                                ? { 
+                                    backgroundColor: theme.bubbleOut, 
+                                    borderTopRightRadius: 3, 
+                                    borderBottomRightRadius: 12, 
+                                    borderBottomLeftRadius: 12, 
+                                    borderTopLeftRadius: 12,
+                                    marginRight: 6
+                                  } 
+                                : { 
+                                    backgroundColor: theme.bubbleIn, 
+                                    borderTopLeftRadius: 3, 
+                                    borderBottomLeftRadius: 12, 
+                                    borderBottomRightRadius: 12, 
+                                    borderTopRightRadius: 12,
+                                    marginLeft: 6
+                                  }
                         ]}
                     >
                         {/* WhatsApp Quoted Reply Preview Box */}
-                        {quoted && (
+                        {quotedInfo && (
                             <TouchableOpacity 
                                 style={[
                                     styles.quotedBox,
@@ -429,13 +541,13 @@ export default function WhatsAppChatScreen({ route, navigation }) {
                                         backgroundColor: isOutbound 
                                             ? (isDarkMode ? 'rgba(0, 0, 0, 0.28)' : 'rgba(0, 0, 0, 0.06)') 
                                             : (isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)'),
-                                        borderLeftColor: isOutbound ? '#25D366' : '#53bdeb'
+                                        borderLeftColor: isOutbound ? '#25D366' : (isDarkMode ? '#53bdeb' : '#008069')
                                     }
                                 ]}
                                 activeOpacity={0.8}
                                 onPress={() => {
-                                    if (quoted.id) {
-                                        const targetIdx = mergedFeed.findIndex(m => String(m.id) === String(quoted.id));
+                                    if (quotedInfo.id) {
+                                        const targetIdx = mergedFeed.findIndex(m => String(m.id) === String(quotedInfo.id));
                                         if (targetIdx >= 0 && flatListRef.current) {
                                             flatListRef.current.scrollToIndex({ index: targetIdx, animated: true, viewPosition: 0.5 });
                                         }
@@ -443,10 +555,10 @@ export default function WhatsAppChatScreen({ route, navigation }) {
                                 }}
                             >
                                 <Text style={[styles.quotedSender, { color: isOutbound ? '#25D366' : (isDarkMode ? '#53bdeb' : '#008069') }]}>
-                                    {quoted.senderName || (quoted.direction === 'OUTBOUND' ? 'You' : leadName)}
+                                    {quotedInfo.senderName}
                                 </Text>
-                                <Text style={[styles.quotedSnippet, { color: isOutbound ? theme.timeOut : theme.timeIn }]} numberOfLines={2}>
-                                    {quoted.message || (typeof quoted === 'string' ? quoted : 'Original message')}
+                                <Text style={[styles.quotedSnippet, { color: isOutbound ? (isDarkMode ? '#c1c9cf' : '#4a5568') : (isDarkMode ? '#8696a0' : '#667781') }]} numberOfLines={2}>
+                                    {quotedInfo.message}
                                 </Text>
                             </TouchableOpacity>
                         )}
@@ -517,18 +629,7 @@ export default function WhatsAppChatScreen({ route, navigation }) {
                             )}
                         </View>
                     </TouchableOpacity>
-
-                    {/* Reply Icon for Outbound */}
-                    {isOutbound && (
-                        <TouchableOpacity 
-                            style={styles.bubbleReplyBtn}
-                            onPress={onStartReply}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        >
-                            <Icon name="reply" size={17} color={theme.iconColor} />
-                        </TouchableOpacity>
-                    )}
-                </View>
+                </SwipeableMessageBubble>
             </View>
         );
     };
@@ -984,10 +1085,14 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-start'
     },
     bubble: {
-        maxWidth: width * 0.78,
+        maxWidth: width * 0.82,
         paddingHorizontal: 12,
-        paddingVertical: 8,
+        paddingVertical: 7,
         borderRadius: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.15,
+        shadowRadius: 1.5,
         elevation: 1
     },
     messageText: {
@@ -1317,11 +1422,36 @@ const styles = StyleSheet.create({
         fontSize: 12,
         lineHeight: 16
     },
-    bubbleReplyBtn: {
-        alignSelf: 'center',
-        padding: 6,
-        marginHorizontal: 4,
-        opacity: 0.6
+    swipeContainer: {
+        width: '100%',
+        marginVertical: 2.5,
+        justifyContent: 'center',
+        position: 'relative'
+    },
+    swipeReplyIconWrap: {
+        position: 'absolute',
+        left: 14,
+        top: 0,
+        bottom: 0,
+        zIndex: 1,
+        justifyContent: 'center',
+        alignItems: 'center'
+    },
+    swipeReplyCircle: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#00a884',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.25,
+        shadowRadius: 2,
+        elevation: 3
+    },
+    swipeableContent: {
+        width: '100%'
     },
     replyPreviewBar: {
         flexDirection: 'row',
