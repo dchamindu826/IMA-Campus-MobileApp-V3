@@ -315,8 +315,33 @@ export const CallProvider = ({ children }) => {
 
     // Answer Inbound Call
     const answerCall = async (callId, offerSdp) => {
-        stopRinging();
-        
+        const currentIncoming = incomingCallRef.current || incomingCall;
+        const targetCallId = callId || currentIncoming?.callId;
+        const targetOfferSdp = offerSdp || currentIncoming?.sdp || currentIncoming?.offerSdp || currentIncoming?.offer?.sdp;
+
+        if (!targetCallId || !targetOfferSdp) {
+            console.error("Mobile: Cannot answer call - missing callId or offer SDP", { targetCallId, hasSdp: Boolean(targetOfferSdp) });
+            return;
+        }
+
+        // Stop ringtone audio immediately, but DO NOT clear incomingCall to null yet!
+        setIsRinging(false);
+
+        // Immediately transition UI into active CONNECTING state so popup modal NEVER disappears
+        setActiveCall({
+            callId: targetCallId,
+            from: currentIncoming?.from || '',
+            leadName: currentIncoming?.leadName || 'Student',
+            businessType: currentIncoming?.businessType || 'IMA Campus',
+            receivingWaNumId: currentIncoming?.receivingWaNumId,
+            startTime: new Date(),
+            peerConnection: null,
+            localStream: null,
+            isMuted: false,
+            isOutbound: false,
+            status: 'CONNECTING'
+        });
+
         try {
             const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
             pcRef.current = pc;
@@ -350,29 +375,59 @@ export const CallProvider = ({ children }) => {
                 }
             };
 
-            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerSdp }));
+            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: targetOfferSdp }));
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
 
-            await api.post('/admin/whatsapp-call/answer', {
-                callId: callId,
-                sdp: answer.sdp,
-                businessType: incomingCall?.businessType,
-                receivingWaNumId: incomingCall?.receivingWaNumId
+            // Give ICE candidates a brief window (up to 800ms) to gather
+            await new Promise(resolve => {
+                if (pc.iceGatheringState === 'complete') return resolve();
+                const timeout = setTimeout(resolve, 800);
+                pc.onicegatheringstatechange = () => {
+                    if (pc.iceGatheringState === 'complete') {
+                        clearTimeout(timeout);
+                        resolve();
+                    }
+                };
             });
 
-            setActiveCall({
-                callId: incomingCall.callId,
-                from: incomingCall.from,
-                leadName: incomingCall.leadName,
-                businessType: incomingCall.businessType,
-                startTime: new Date(),
+            const finalAnswerSdp = pc.localDescription?.sdp || answer.sdp;
+
+            // 1. Emit answer over Socket.io (instant real-time signaling, immune to HTTP network errors)
+            if (socket && socket.connected) {
+                const answerPayload = {
+                    callId: targetCallId,
+                    sdp: finalAnswerSdp,
+                    businessType: currentIncoming?.businessType,
+                    receivingWaNumId: currentIncoming?.receivingWaNumId
+                };
+                socket.emit('answer_wa_call', answerPayload);
+                socket.emit('whatsapp_call_answer', answerPayload);
+                console.log('Mobile: Emitted socket answer_wa_call successfully for callId:', targetCallId);
+            }
+
+            // 2. HTTP POST endpoint (dual-channel delivery)
+            try {
+                await api.post('/admin/whatsapp-call/answer', {
+                    callId: targetCallId,
+                    sdp: finalAnswerSdp,
+                    businessType: currentIncoming?.businessType,
+                    receivingWaNumId: currentIncoming?.receivingWaNumId
+                }, { timeout: 10000 });
+                console.log('Mobile: HTTP POST answer succeeded for callId:', targetCallId);
+            } catch (httpErr) {
+                console.warn("Mobile: HTTP answer endpoint warning (socket fallback active):", httpErr?.message || httpErr);
+            }
+
+            // Successfully connected - update active call state
+            setActiveCall(prev => prev ? {
+                ...prev,
                 peerConnection: pc,
                 localStream: stream,
-                isMuted: false,
-                isOutbound: false,
                 status: 'CONNECTED'
-            });
+            } : null);
+
+            setIncomingCall(null);
 
         } catch (err) {
             console.error("Mobile: Error answering call:", err);
@@ -493,10 +548,13 @@ export const CallProvider = ({ children }) => {
 
     // Reject Inbound Call
     const rejectCall = async (callId) => {
-        if (incomingCall) {
+        const currentIncoming = incomingCallRef.current || incomingCall;
+        const targetCallId = callId || currentIncoming?.callId;
+
+        if (currentIncoming) {
             saveCallLog({
-                phone: incomingCall.from,
-                leadName: incomingCall.leadName,
+                phone: currentIncoming.from,
+                leadName: currentIncoming.leadName,
                 isOutbound: false,
                 status: 'REJECTED',
                 duration: 0,
@@ -504,15 +562,27 @@ export const CallProvider = ({ children }) => {
             });
         }
         stopRinging();
+
+        if (socket && socket.connected && targetCallId) {
+            const rejectPayload = {
+                callId: targetCallId,
+                businessType: currentIncoming?.businessType,
+                receivingWaNumId: currentIncoming?.receivingWaNumId,
+                leadPhone: currentIncoming?.from
+            };
+            socket.emit('reject_wa_call', rejectPayload);
+            socket.emit('whatsapp_call_reject', rejectPayload);
+        }
+
         try {
             await api.post('/admin/whatsapp-call/reject', { 
-                callId, 
-                businessType: incomingCall?.businessType, 
-                receivingWaNumId: incomingCall?.receivingWaNumId,
-                leadPhone: incomingCall?.from
-            });
+                callId: targetCallId, 
+                businessType: currentIncoming?.businessType, 
+                receivingWaNumId: currentIncoming?.receivingWaNumId,
+                leadPhone: currentIncoming?.from
+            }, { timeout: 8000 });
         } catch (err) {
-            console.error("Mobile: Error rejecting call:", err);
+            console.error("Mobile: Error rejecting call:", err?.message || err);
         }
     };
 
@@ -535,6 +605,18 @@ export const CallProvider = ({ children }) => {
                 createdAt: currActive.startTime ? new Date(currActive.startTime).toISOString() : new Date().toISOString()
             });
 
+            if (socket && socket.connected && currActive.callId) {
+                const termPayload = {
+                    callId: currActive.callId,
+                    businessType: currActive.businessType,
+                    receivingWaNumId: currActive.receivingWaNumId,
+                    leadPhone: currActive.from,
+                    duration
+                };
+                socket.emit('end_wa_call', termPayload);
+                socket.emit('whatsapp_call_terminate', termPayload);
+            }
+
             try {
                 await api.post('/admin/whatsapp-call/terminate', {
                     callId: currActive.callId,
@@ -542,9 +624,9 @@ export const CallProvider = ({ children }) => {
                     receivingWaNumId: currActive.receivingWaNumId,
                     leadPhone: currActive.from,
                     duration
-                }).catch(() => {});
+                }, { timeout: 8000 }).catch(() => {});
             } catch (err) {
-                console.error("Mobile: Error terminating call on backend:", err);
+                console.error("Mobile: Error terminating call on backend:", err?.message || err);
             }
 
             if (currActive.peerConnection) {
