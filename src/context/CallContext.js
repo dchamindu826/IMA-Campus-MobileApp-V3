@@ -57,6 +57,8 @@ export const CallProvider = ({ children }) => {
     const [activeCall, setActiveCall] = useState(null); // { callId, from, leadName, businessType, status, isOutbound, isMuted, peerConnection, localStream, startTime }
     const [isRinging, setIsRinging] = useState(false);
     const [agentStatus, setAgentStatus] = useState('OFFLINE');
+    const [isOnHold, setIsOnHold] = useState(false);
+    const [isCallMinimized, setIsCallMinimized] = useState(false);
 
     const pcRef = useRef(null);
     const localStreamRef = useRef(null);
@@ -751,6 +753,8 @@ export const CallProvider = ({ children }) => {
         
         activeCallRef.current = null;
         setActiveCall(null);
+        setIsOnHold(false);
+        setIsCallMinimized(false);
         stopRinging();
     };
 
@@ -765,6 +769,58 @@ export const CallProvider = ({ children }) => {
         }
     };
 
+    // Toggle Hold State & Play Hold Music
+    const toggleHold = async () => {
+        const curr = activeCallRef.current || activeCall;
+        if (!curr) return;
+        const nextHold = !isOnHold;
+        setIsOnHold(nextHold);
+
+        // When on hold, mute microphone so the remote customer hears hold music rather than staff
+        if (curr.localStream) {
+            const audioTrack = curr.localStream.getAudioTracks()[0];
+            if (audioTrack) {
+                audioTrack.enabled = !nextHold;
+            }
+        }
+
+        // Notify socket listeners
+        if (socket && socket.connected && curr.callId) {
+            const holdPayload = {
+                callId: curr.callId,
+                onHold: nextHold,
+                businessType: curr.businessType,
+                receivingWaNumId: curr.receivingWaNumId,
+                leadPhone: curr.from
+            };
+            socket.emit('hold_wa_call', holdPayload);
+            socket.emit('whatsapp_call_hold', holdPayload);
+        }
+
+        // Notify backend API
+        try {
+            await api.post('/admin/whatsapp-call/hold', {
+                callId: curr.callId,
+                onHold: nextHold,
+                businessType: curr.businessType,
+                receivingWaNumId: curr.receivingWaNumId,
+                leadPhone: curr.from
+            }, { timeout: 6000 }).catch(() => {});
+        } catch (e) {}
+
+        // Update CallKit hold state
+        if (curr.callId) {
+            try {
+                RNCallKeep.setOnHold(curr.callId, nextHold);
+            } catch (e) {}
+        }
+    };
+
+    // Toggle In-Call Minimization (Allows staff to navigate and use app during call)
+    const toggleMinimize = (val) => {
+        setIsCallMinimized(prev => typeof val === 'boolean' ? val : !prev);
+    };
+
     const baseAudioUrl = api.defaults.baseURL.replace('/api/', '').replace('/api', '');
 
     return (
@@ -774,17 +830,33 @@ export const CallProvider = ({ children }) => {
             activeCall,
             isRinging,
             agentStatus,
+            isOnHold,
+            isCallMinimized,
             changeStatus,
             answerCall,
             startOutboundCall,
             rejectCall,
             endCall,
-            toggleMute
+            toggleMute,
+            toggleHold,
+            toggleMinimize
         }}>
             {children}
+            {/* Incoming Ringtone */}
             {isRinging && incomingCall?.ringtoneUrl && (
                 <Video
                     source={{ uri: `${baseAudioUrl}${incomingCall.ringtoneUrl}` }}
+                    audioOnly={true}
+                    repeat={true}
+                    playInBackground={true}
+                    ignoreSilentSwitch="ignore"
+                    style={{ width: 0, height: 0, position: 'absolute' }}
+                />
+            )}
+            {/* On-Hold Music */}
+            {activeCall && isOnHold && (
+                <Video
+                    source={{ uri: (activeCall?.holdMusicUrl || incomingCall?.holdMusicUrl ? `${baseAudioUrl}${activeCall?.holdMusicUrl || incomingCall?.holdMusicUrl}` : 'https://commondatastorage.googleapis.com/codeskulptor-assets/Epoq-Lepidoptera.ogg') }}
                     audioOnly={true}
                     repeat={true}
                     playInBackground={true}

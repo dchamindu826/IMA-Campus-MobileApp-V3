@@ -1,7 +1,7 @@
 import 'react-native-url-polyfill/auto';
 import { AppRegistry, Platform } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
-import notifee, { AndroidImportance } from '@notifee/react-native';
+import notifee, { AndroidImportance, AndroidCategory } from '@notifee/react-native';
 import VoipPushNotification from 'react-native-voip-push-notification';
 import RNCallKeep from 'react-native-callkeep';
 import App from './App';
@@ -57,13 +57,26 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
           channelId: 'calls_channel',
           sound: 'default',
           importance: AndroidImportance.HIGH,
+          category: AndroidCategory.CALL,
           color: '#25D366',
           smallIcon: 'ic_launcher',
+          ongoing: true,
+          autoCancel: false,
+          fullScreenAction: {
+            id: 'default',
+            launchActivity: 'default'
+          },
           pressAction: {
             id: 'default',
             launchActivity: 'default'
           },
           actions: [
+            {
+              title: 'Decline',
+              pressAction: {
+                id: 'decline_call'
+              }
+            },
             {
               title: 'Answer',
               pressAction: {

@@ -6,7 +6,20 @@ import { useCall } from '../context/CallContext';
 const { width } = Dimensions.get('window');
 
 const GlobalCallPopup = () => {
-    const { isRinging, incomingCall, activeCall, answerCall, rejectCall, endCall, toggleMute } = useCall();
+    const {
+        isRinging,
+        incomingCall,
+        activeCall,
+        answerCall,
+        rejectCall,
+        endCall,
+        toggleMute,
+        isOnHold,
+        toggleHold,
+        isCallMinimized,
+        toggleMinimize
+    } = useCall();
+
     const [callDuration, setCallDuration] = useState(0);
     const pulseAnim = useState(new Animated.Value(1))[0];
 
@@ -20,10 +33,11 @@ const GlobalCallPopup = () => {
             setCallDuration(0);
         }
         return () => clearInterval(interval);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeCall?.status]);
 
     useEffect(() => {
-        if (isRinging || (activeCall && activeCall.status !== 'CONNECTED')) {
+        if (isRinging || (activeCall && activeCall.status !== 'CONNECTED') || isOnHold) {
             const loop = Animated.loop(
                 Animated.sequence([
                     Animated.timing(pulseAnim, { toValue: 1.25, duration: 800, useNativeDriver: true }),
@@ -33,7 +47,8 @@ const GlobalCallPopup = () => {
             loop.start();
             return () => loop.stop();
         }
-    }, [isRinging, activeCall?.status]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isRinging, activeCall?.status, isOnHold, pulseAnim]);
 
     const formatTime = (seconds) => {
         const m = Math.floor(seconds / 60);
@@ -53,121 +68,354 @@ const GlobalCallPopup = () => {
         if (isRinging) return "Incoming WhatsApp Call...";
         if (isDialing) return "Calling via WhatsApp...";
         if (isRemoteRinging) return "Ringing... 🔔";
+        if (isOnHold) return "Call on Hold ⏸️ (Music Playing)";
+        if (activeCall?.isMuted) return "Microphone Muted 🔇";
         if (isConnected) return "WhatsApp Call in Progress";
         return "Connecting Call...";
     };
 
     return (
-        <Modal transparent={true} visible={isRinging || !!activeCall} animationType="fade">
-            <View style={styles.overlay}>
-                <View style={styles.popupContainer}>
-                    
-                    {/* Pulsing Avatar Icon */}
-                    <View style={styles.iconContainer}>
-                        {(isRinging || isDialing || isRemoteRinging) && (
-                            <Animated.View style={[styles.rippleEffect, { transform: [{ scale: pulseAnim }] }]} />
-                        )}
-                        <View style={[styles.iconBackground, isConnected && styles.activeIconBackground]}>
-                            <Icon 
-                                name={isConnected ? "phone-in-talk" : isOutbound ? "phone-outgoing" : "phone-incoming"} 
-                                size={40} 
-                                color="white" 
-                            />
+        <>
+            {/* 1. FLOATING IN-CALL MINI BAR (Shown when staff minimizes call to control app in background) */}
+            {activeCall && isCallMinimized && (
+                <View style={styles.floatingContainer} pointerEvents="box-none">
+                    <TouchableOpacity
+                        style={[styles.floatingPill, isOnHold && styles.floatingPillHold]}
+                        activeOpacity={0.9}
+                        onPress={() => toggleMinimize(false)}
+                    >
+                        {/* Indicator Icon */}
+                        <View style={[styles.floatingDot, isOnHold ? styles.floatingDotHold : styles.floatingDotActive]}>
+                            <Icon name={isOnHold ? "pause" : "phone"} size={13} color="#FFFFFF" />
                         </View>
-                    </View>
 
-                    {/* Status Label */}
-                    <View style={styles.statusBadge}>
-                        <Icon name="whatsapp" size={16} color="#25D366" style={{ marginRight: 6 }} />
-                        <Text style={styles.statusBadgeText}>{getStatusText()}</Text>
-                    </View>
-
-                    {/* Caller / Lead Info */}
-                    <Text style={styles.nameText} numberOfLines={1}>{callData?.leadName || 'Student'}</Text>
-                    <Text style={styles.phoneText}>{callData?.from || ''}</Text>
-
-                    {callData?.businessType && (
-                        <View style={styles.businessBadge}>
-                            <Text style={styles.businessBadgeText}>{callData.businessType}</Text>
+                        {/* Caller Info & Duration */}
+                        <View style={styles.floatingInfo}>
+                            <Text style={styles.floatingTitle} numberOfLines={1}>
+                                {callData?.leadName || 'Student'}
+                            </Text>
+                            <Text style={[styles.floatingSub, isOnHold && styles.floatingSubHold]}>
+                                {isOnHold ? "⏸️ On Hold • Music Playing" : `${formatTime(callDuration)} • In Progress`}
+                            </Text>
                         </View>
-                    )}
-                    
-                    {/* Duration Timer */}
-                    {isConnected ? (
-                        <Text style={styles.timerText}>{formatTime(callDuration)}</Text>
-                    ) : (
-                        <View style={{ height: 25 }} />
-                    )}
 
-                    {/* Action Buttons */}
-                    <View style={styles.actionContainer}>
-                        {activeCall ? (
-                            <>
-                                <View style={styles.actionBtnWrapper}>
-                                    <TouchableOpacity 
-                                        style={[styles.actionButton, activeCall.isMuted ? styles.mutedButton : styles.activeButton]} 
-                                        onPress={toggleMute}
-                                    >
-                                        <Icon name={activeCall.isMuted ? "microphone-off" : "microphone"} size={28} color="white" />
-                                    </TouchableOpacity>
-                                    <Text style={styles.actionText}>{activeCall.isMuted ? "Unmute" : "Mute"}</Text>
-                                </View>
+                        {/* Quick Action Controls */}
+                        <View style={styles.floatingActions}>
+                            {/* Hold / Resume */}
+                            <TouchableOpacity
+                                style={[styles.miniBtn, isOnHold ? styles.miniBtnHoldActive : styles.miniBtnHold]}
+                                onPress={toggleHold}
+                                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                            >
+                                <Icon name={isOnHold ? "play" : "pause"} size={16} color={isOnHold ? "#F59E0B" : "#E2E8F0"} />
+                            </TouchableOpacity>
 
-                                <View style={styles.actionBtnWrapper}>
-                                    <TouchableOpacity 
-                                        style={[styles.actionButton, styles.rejectButton]} 
-                                        onPress={endCall}
-                                    >
-                                        <Icon name="phone-hangup" size={30} color="white" />
-                                    </TouchableOpacity>
-                                    <Text style={styles.actionText}>End Call</Text>
-                                </View>
-                            </>
-                        ) : (
-                            <>
-                                <View style={styles.actionBtnWrapper}>
-                                    <TouchableOpacity 
-                                        style={[styles.actionButton, styles.rejectButton]} 
-                                        onPress={() => rejectCall(incomingCall?.callId)}
-                                    >
-                                        <Icon name="phone-hangup" size={30} color="white" />
-                                    </TouchableOpacity>
-                                    <Text style={styles.actionText}>Decline</Text>
-                                </View>
+                            {/* Mute */}
+                            <TouchableOpacity
+                                style={[styles.miniBtn, activeCall.isMuted && styles.miniBtnMuted]}
+                                onPress={toggleMute}
+                                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                            >
+                                <Icon name={activeCall.isMuted ? "microphone-off" : "microphone"} size={16} color={activeCall.isMuted ? "#EF4444" : "#E2E8F0"} />
+                            </TouchableOpacity>
 
-                                <View style={styles.actionBtnWrapper}>
-                                    <TouchableOpacity 
-                                        style={[styles.actionButton, styles.answerButton]} 
-                                        onPress={() => answerCall(incomingCall?.callId, incomingCall?.sdp)}
-                                    >
-                                        <Icon name="phone" size={30} color="white" />
-                                    </TouchableOpacity>
-                                    <Text style={styles.actionText}>Answer</Text>
-                                </View>
-                            </>
-                        )}
-                    </View>
-                    
+                            {/* End Call */}
+                            <TouchableOpacity
+                                style={[styles.miniBtn, styles.miniBtnEnd]}
+                                onPress={endCall}
+                                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                            >
+                                <Icon name="phone-hangup" size={16} color="#FFFFFF" />
+                            </TouchableOpacity>
+
+                            {/* Expand icon */}
+                            <TouchableOpacity
+                                style={styles.miniExpandBtn}
+                                onPress={() => toggleMinimize(false)}
+                                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                            >
+                                <Icon name="arrow-expand" size={15} color="#94A3B8" />
+                            </TouchableOpacity>
+                        </View>
+                    </TouchableOpacity>
                 </View>
-            </View>
-        </Modal>
+            )}
+
+            {/* 2. FULL SCREEN CALL MODAL (Shown when incoming call rings or maximized) */}
+            <Modal transparent={true} visible={(isRinging || !!activeCall) && !isCallMinimized} animationType="fade">
+                <View style={styles.overlay}>
+                    <View style={styles.popupContainer}>
+
+                        {/* Top Header with Minimize shortcut for multitasking */}
+                        <View style={styles.headerRow}>
+                            <View style={styles.headerBadge}>
+                                <Icon name="whatsapp" size={15} color="#25D366" style={{ marginRight: 5 }} />
+                                <Text style={styles.headerBadgeText}>WhatsApp Audio Call</Text>
+                            </View>
+
+                            {activeCall && (
+                                <TouchableOpacity
+                                    style={styles.headerMinimizeBtn}
+                                    onPress={() => toggleMinimize(true)}
+                                    activeOpacity={0.7}
+                                >
+                                    <Icon name="arrow-collapse" size={16} color="#94A3B8" style={{ marginRight: 4 }} />
+                                    <Text style={styles.headerMinimizeText}>Minimize</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        {/* Pulsing Avatar Icon */}
+                        <View style={styles.iconContainer}>
+                            {(isRinging || isDialing || isRemoteRinging || isOnHold) && (
+                                <Animated.View
+                                    style={[
+                                        styles.rippleEffect,
+                                        isOnHold && styles.rippleHold,
+                                        { transform: [{ scale: pulseAnim }] }
+                                    ]}
+                                />
+                            )}
+                            <View
+                                style={[
+                                    styles.iconBackground,
+                                    isOnHold ? styles.holdIconBackground : isConnected ? styles.activeIconBackground : null
+                                ]}
+                            >
+                                <Icon
+                                    name={isOnHold ? "phone-paused" : isConnected ? "phone-in-talk" : isOutbound ? "phone-outgoing" : "phone-incoming"}
+                                    size={38}
+                                    color="white"
+                                />
+                            </View>
+                        </View>
+
+                        {/* Status Label */}
+                        <View style={[styles.statusBadge, isOnHold && styles.statusBadgeHold]}>
+                            <Icon
+                                name={isOnHold ? "pause-circle" : "whatsapp"}
+                                size={15}
+                                color={isOnHold ? "#F59E0B" : "#25D366"}
+                                style={{ marginRight: 6 }}
+                            />
+                            <Text style={[styles.statusBadgeText, isOnHold && styles.statusBadgeTextHold]}>
+                                {getStatusText()}
+                            </Text>
+                        </View>
+
+                        {/* Caller / Lead Info */}
+                        <Text style={styles.nameText} numberOfLines={1}>{callData?.leadName || 'Student'}</Text>
+                        <Text style={styles.phoneText}>{callData?.from || ''}</Text>
+
+                        {callData?.businessType && (
+                            <View style={styles.businessBadge}>
+                                <Text style={styles.businessBadgeText}>{callData.businessType}</Text>
+                            </View>
+                        )}
+
+                        {/* Duration Timer */}
+                        {isConnected ? (
+                            <Text style={[styles.timerText, isOnHold && styles.timerTextHold]}>
+                                {formatTime(callDuration)}
+                            </Text>
+                        ) : (
+                            <View style={{ height: 25 }} />
+                        )}
+
+                        {/* Action Buttons */}
+                        <View style={styles.actionContainer}>
+                            {activeCall ? (
+                                <>
+                                    {/* Mute Button */}
+                                    <View style={styles.actionBtnWrapper}>
+                                        <TouchableOpacity
+                                            style={[styles.actionButton, activeCall.isMuted ? styles.mutedButton : styles.activeButton]}
+                                            onPress={toggleMute}
+                                        >
+                                            <Icon name={activeCall.isMuted ? "microphone-off" : "microphone"} size={26} color="white" />
+                                        </TouchableOpacity>
+                                        <Text style={styles.actionText}>{activeCall.isMuted ? "Unmute" : "Mute"}</Text>
+                                    </View>
+
+                                    {/* Hold Call Button (Plays music for caller) */}
+                                    <View style={styles.actionBtnWrapper}>
+                                        <TouchableOpacity
+                                            style={[styles.actionButton, isOnHold ? styles.holdActiveButton : styles.activeButton]}
+                                            onPress={toggleHold}
+                                        >
+                                            <Icon name={isOnHold ? "play" : "pause"} size={26} color="white" />
+                                        </TouchableOpacity>
+                                        <Text style={[styles.actionText, isOnHold && styles.actionTextHold]}>
+                                            {isOnHold ? "Resume" : "Hold"}
+                                        </Text>
+                                    </View>
+
+                                    {/* Minimize / Multitask in App Button */}
+                                    <View style={styles.actionBtnWrapper}>
+                                        <TouchableOpacity
+                                            style={[styles.actionButton, styles.activeButton]}
+                                            onPress={() => toggleMinimize(true)}
+                                        >
+                                            <Icon name="arrow-collapse" size={26} color="white" />
+                                        </TouchableOpacity>
+                                        <Text style={styles.actionText}>Use App</Text>
+                                    </View>
+
+                                    {/* End Call Button */}
+                                    <View style={styles.actionBtnWrapper}>
+                                        <TouchableOpacity
+                                            style={[styles.actionButton, styles.rejectButton]}
+                                            onPress={endCall}
+                                        >
+                                            <Icon name="phone-hangup" size={28} color="white" />
+                                        </TouchableOpacity>
+                                        <Text style={styles.actionText}>End</Text>
+                                    </View>
+                                </>
+                            ) : (
+                                <>
+                                    {/* Decline */}
+                                    <View style={styles.actionBtnWrapper}>
+                                        <TouchableOpacity
+                                            style={[styles.actionButton, styles.rejectButton]}
+                                            onPress={() => rejectCall(incomingCall?.callId)}
+                                        >
+                                            <Icon name="phone-hangup" size={30} color="white" />
+                                        </TouchableOpacity>
+                                        <Text style={styles.actionText}>Decline</Text>
+                                    </View>
+
+                                    {/* Answer */}
+                                    <View style={styles.actionBtnWrapper}>
+                                        <TouchableOpacity
+                                            style={[styles.actionButton, styles.answerButton]}
+                                            onPress={() => answerCall(incomingCall?.callId, incomingCall?.sdp)}
+                                        >
+                                            <Icon name="phone" size={30} color="white" />
+                                        </TouchableOpacity>
+                                        <Text style={styles.actionText}>Answer</Text>
+                                    </View>
+                                </>
+                            )}
+                        </View>
+
+                    </View>
+                </View>
+            </Modal>
+        </>
     );
 };
 
 const styles = StyleSheet.create({
+    // Floating Pill Container
+    floatingContainer: {
+        position: 'absolute',
+        top: 50,
+        left: 12,
+        right: 12,
+        zIndex: 999999,
+        elevation: 25
+    },
+    floatingPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#111b21',
+        borderRadius: 22,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderWidth: 1.5,
+        borderColor: '#25D366',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.5,
+        shadowRadius: 10,
+        elevation: 12
+    },
+    floatingPillHold: {
+        borderColor: '#F59E0B',
+        backgroundColor: '#1A1D1A'
+    },
+    floatingDot: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 10
+    },
+    floatingDotActive: {
+        backgroundColor: '#25D366'
+    },
+    floatingDotHold: {
+        backgroundColor: '#F59E0B'
+    },
+    floatingInfo: {
+        flex: 1,
+        justifyContent: 'center'
+    },
+    floatingTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#FFFFFF'
+    },
+    floatingSub: {
+        fontSize: 11,
+        color: '#25D366',
+        fontWeight: '600',
+        marginTop: 1
+    },
+    floatingSubHold: {
+        color: '#F59E0B'
+    },
+    floatingActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6
+    },
+    miniBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.12)'
+    },
+    miniBtnHold: {
+        backgroundColor: 'rgba(245, 158, 11, 0.2)'
+    },
+    miniBtnHoldActive: {
+        backgroundColor: 'rgba(245, 158, 11, 0.35)',
+        borderWidth: 1,
+        borderColor: '#F59E0B'
+    },
+    miniBtnMuted: {
+        backgroundColor: 'rgba(239, 68, 68, 0.25)'
+    },
+    miniBtnEnd: {
+        backgroundColor: '#EF4444'
+    },
+    miniExpandBtn: {
+        width: 26,
+        height: 26,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: 2
+    },
+
+    // Full Screen Modal Overlay
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(7, 13, 20, 0.88)',
+        backgroundColor: 'rgba(7, 13, 20, 0.90)',
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20
     },
     popupContainer: {
-        width: Math.min(width - 40, 380),
+        width: Math.min(width - 32, 390),
         backgroundColor: '#111b21',
         borderRadius: 28,
-        paddingVertical: 35,
-        paddingHorizontal: 25,
+        paddingVertical: 26,
+        paddingHorizontal: 22,
         alignItems: 'center',
         elevation: 15,
         shadowColor: '#000',
@@ -176,9 +424,38 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.1)'
     },
+    headerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+        marginBottom: 16
+    },
+    headerBadge: {
+        flexDirection: 'row',
+        alignItems: 'center'
+    },
+    headerBadgeText: {
+        fontSize: 12,
+        color: '#8696a0',
+        fontWeight: '600'
+    },
+    headerMinimizeBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 14
+    },
+    headerMinimizeText: {
+        fontSize: 11,
+        color: '#CBD5E1',
+        fontWeight: '600'
+    },
     iconContainer: {
         position: 'relative',
-        marginBottom: 16,
+        marginBottom: 14,
         justifyContent: 'center',
         alignItems: 'center'
     },
@@ -188,6 +465,9 @@ const styles = StyleSheet.create({
         height: 110,
         borderRadius: 55,
         backgroundColor: 'rgba(37, 211, 102, 0.25)',
+    },
+    rippleHold: {
+        backgroundColor: 'rgba(245, 158, 11, 0.25)',
     },
     iconBackground: {
         width: 76,
@@ -201,6 +481,9 @@ const styles = StyleSheet.create({
     activeIconBackground: {
         backgroundColor: '#00a884'
     },
+    holdIconBackground: {
+        backgroundColor: '#D97706'
+    },
     statusBadge: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -210,11 +493,17 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         marginBottom: 10
     },
+    statusBadgeHold: {
+        backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    },
     statusBadgeText: {
         fontSize: 13,
         fontWeight: '700',
         color: '#25D366',
         letterSpacing: 0.3
+    },
+    statusBadgeTextHold: {
+        color: '#F59E0B'
     },
     nameText: {
         fontSize: 22,
@@ -246,8 +535,11 @@ const styles = StyleSheet.create({
         fontSize: 28,
         fontWeight: '600',
         color: '#25D366',
-        marginVertical: 10,
+        marginVertical: 8,
         fontFamily: 'monospace'
+    },
+    timerTextHold: {
+        color: '#F59E0B'
     },
     actionContainer: {
         flexDirection: 'row',
@@ -257,14 +549,15 @@ const styles = StyleSheet.create({
     },
     actionBtnWrapper: {
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        flex: 1
     },
     actionButton: {
         alignItems: 'center',
         justifyContent: 'center',
-        width: 66,
-        height: 66,
-        borderRadius: 33,
+        width: 58,
+        height: 58,
+        borderRadius: 29,
         elevation: 6
     },
     rejectButton: {
@@ -279,11 +572,20 @@ const styles = StyleSheet.create({
     mutedButton: {
         backgroundColor: '#F59E0B'
     },
+    holdActiveButton: {
+        backgroundColor: '#D97706',
+        borderWidth: 2,
+        borderColor: '#FDE68A'
+    },
     actionText: {
         color: '#e9edef',
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: '600',
-        marginTop: 8
+        marginTop: 7,
+        textAlign: 'center'
+    },
+    actionTextHold: {
+        color: '#F59E0B'
     }
 });
 
