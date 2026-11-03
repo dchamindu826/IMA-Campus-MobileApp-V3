@@ -111,7 +111,7 @@ const PaymentsScreen = ({ navigation }) => {
 
     const extractAmountFromRemark = (remark) => {
       if (!remark) return 0;
-      const match = String(remark).match(/(?:Extracted Total|Target Amount|LKR|Rs\.?)\s*:?\s*(?:LKR|Rs\.?)?\s*([\d,]+(?:\.\d{1,2})?)/i);
+      const match = String(remark).match(/(?:Extracted Total|Target Amount|Wallet Excess \(-?LKR|Wallet Due \(\+?LKR|Wallet adjusted by LKR [+-]?|LKR|Rs\.?)\s*:?\s*(?:LKR|Rs\.?)?\s*([\d,]+(?:\.\d{1,2})?)/i);
       if (match && match[1]) {
         return parseFloat(match[1].replace(/,/g, ''));
       }
@@ -131,6 +131,9 @@ const PaymentsScreen = ({ navigation }) => {
     if (displayAmount === 0 && item.remark) {
       displayAmount = extractAmountFromRemark(item.remark);
     }
+
+    const isWalletSettled = String(item.remark || '').includes('Wallet');
+    const isFreeCard = String(item.remark || '').includes('Free Card');
 
     return (
       <View style={[styles.card, isOverdue && styles.cardOverdue]}>
@@ -169,7 +172,25 @@ const PaymentsScreen = ({ navigation }) => {
         <View style={styles.cardFooter}>
           <View>
             <Text style={styles.label}>{isHistory ? 'AMOUNT PAID' : 'AMOUNT PAYABLE'}</Text>
-            <Text style={styles.amountValue}>LKR {displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.amountValue}>
+                {displayAmount > 0 
+                  ? `LKR ${displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                  : isFreeCard 
+                    ? 'FREE CARD'
+                    : 'LKR 0.00'}
+              </Text>
+              {isWalletSettled && (
+                <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                  <Text style={{ fontSize: 10, color: '#065F46', fontWeight: '800' }}>Wallet</Text>
+                </View>
+              )}
+              {isFreeCard && displayAmount > 0 && (
+                <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                  <Text style={{ fontSize: 10, color: '#1E40AF', fontWeight: '800' }}>Free Grant</Text>
+                </View>
+              )}
+            </View>
           </View>
 
           {!isHistory && (

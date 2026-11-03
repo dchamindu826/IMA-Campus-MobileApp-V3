@@ -110,10 +110,18 @@ const MyCoursesScreen = ({ navigation }) => {
     return finalList;
   }, [batchSubjects, classTypeFilter]);
 
+  const isValidImage = (filename) => {
+    if (!filename || typeof filename !== 'string') return false;
+    const clean = filename.trim().toLowerCase();
+    if (clean === '' || clean === 'null' || clean === 'undefined' || clean === 'default.png' || clean === 'none') return false;
+    if (clean.endsWith('.enc') || clean.endsWith('.htm') || clean.endsWith('.html') || clean.endsWith('.php')) return false;
+    return true;
+  };
+
   const renderBusinessCard = ({ item }) => {
-    const hasValidLogo = item.logo && item.logo !== 'default.png';
+    const hasValidLogo = isValidImage(item.logo);
     const logoUri = hasValidLogo
-      ? `${IMAGE_URL}icons/${item.logo}`
+      ? `${IMAGE_URL}icons/${item.logo.trim()}`
       : `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'IMA')}&background=DC2626&color=fff&size=200`;
 
     return (
@@ -131,9 +139,9 @@ const MyCoursesScreen = ({ navigation }) => {
   };
 
   const renderBatchCard = ({ item }) => {
-    const batchLogo = (item.logo && item.logo !== 'default.png')
-      ? item.logo
-      : (item.businessLogo && item.businessLogo !== 'default.png' ? item.businessLogo : null);
+    const batchLogo = isValidImage(item.logo)
+      ? item.logo.trim()
+      : (isValidImage(item.businessLogo) ? item.businessLogo.trim() : null);
     const logoUri = batchLogo
       ? `${IMAGE_URL}icons/${batchLogo}`
       : `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Batch')}&background=1E3A8A&color=fff&size=200`;

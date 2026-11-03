@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity, ScrollView,
-    ActivityIndicator, Modal, Alert, Image, StatusBar, Platform, Dimensions
+    ActivityIndicator, Modal, Alert, Image, StatusBar, Platform, Dimensions, Linking
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import api from '../services/api';
+import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
+import api, { IMAGE_URL } from '../services/api';
 import COLORS from '../constants/colors';
 
 const { width } = Dimensions.get('window');
@@ -31,12 +32,13 @@ const MCQPaperScreen = ({ route, navigation }) => {
     const [paperData, setPaperData] = useState(null);
     const [submission, setSubmission] = useState(null);
 
-    // Exam States: 'PRE_START' | 'COUNTDOWN_TO_START' | 'IN_PROGRESS' | 'SUBMITTED'
+    // Exam States: 'PRE_START' | 'COUNTDOWN_TO_START' | 'IN_PROGRESS' | 'INTERMISSION' | 'STRUCTURED_WRITING' | 'STRUCTURED_UPLOADING' | 'SUBMITTED'
     const [examStatus, setExamStatus] = useState('PRE_START');
     const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
     const [selectedAnswers, setSelectedAnswers] = useState({}); // { [questionId]: optionId }
     const [timeRemainingSeconds, setTimeRemainingSeconds] = useState(null);
     const [timeUntilStartSeconds, setTimeUntilStartSeconds] = useState(null);
+    const [answerImages, setAnswerImages] = useState([]); // [{ uri, fileName, type }]
 
     // Modals
     const [showPaletteModal, setShowPaletteModal] = useState(false);
@@ -117,33 +119,121 @@ const MCQPaperScreen = ({ route, navigation }) => {
             const p = data.paper;
             const sub = data.userSubmission;
             const serverNow = new Date(data.serverTime || Date.now());
+            const pType = p.paperType || (data?.content?.contentType === 'sPaper' ? 'STRUCTURED' : 'MCQ');
+
+            // 1. Check if student has already submitted (single attempt enforcement)
+            const isFullySubmitted = Boolean(
+                sub && (
+                    sub.status === 'SUBMITTED' ||
+                    sub.status === 'GRADED' ||
+                    sub.status === 'PENDING_EVALUATION' ||
+                    (pType === 'STRUCTURED' && Boolean(sub.structuredSubmittedAt || sub.submittedAt || sub.answerFile || sub.answerImages)) ||
+                    (pType === 'BOTH' && Boolean(sub.structuredSubmittedAt || (sub.mcqSubmittedAt && (sub.answerFile || sub.answerImages))))
+                )
+            );
+
+            if (isFullySubmitted) {
+                setSubmission(sub);
+                setExamStatus('SUBMITTED');
+                if (Array.isArray(sub.answers)) {
+                    const ansMap = {};
+                    sub.answers.forEach(a => {
+                        ansMap[a.questionId] = a.selectedOptionId;
+                    });
+                    setSelectedAnswers(ansMap);
+                }
+                setLoading(false);
+                return;
+            }
 
             if (sub) {
                 setSubmission(sub);
-                if (sub.status === 'SUBMITTED' || sub.status === 'GRADED') {
-                    setExamStatus('SUBMITTED');
-                    if (Array.isArray(sub.answers)) {
-                        const ansMap = {};
-                        sub.answers.forEach(a => {
-                            ansMap[a.questionId] = a.selectedOptionId;
-                        });
-                        setSelectedAnswers(ansMap);
+                if (Array.isArray(sub.answers)) {
+                    const ansMap = {};
+                    sub.answers.forEach(a => {
+                        ansMap[a.questionId] = a.selectedOptionId;
+                    });
+                    setSelectedAnswers(ansMap);
+                }
+            }
+
+            // 2. Check BOTH Paper Flow (Part 1 MCQ -> Intermission -> Part 2 Structured)
+            if (pType === 'BOTH') {
+                if (sub && sub.mcqSubmittedAt) {
+                    // Part 1 MCQ already submitted! Check Part 2:
+                    if (sub.structuredStartedAt) {
+                        const sStart = new Date(sub.structuredStartedAt);
+                        const strDurMins = parseInt(p.structuredDurationMinutes || 60, 10);
+                        const strUploadMins = parseInt(p.structuredUploadMinutes || 15, 10);
+                        const writingEnd = new Date(sStart.getTime() + strDurMins * 60 * 1000);
+                        const uploadEnd = new Date(writingEnd.getTime() + strUploadMins * 60 * 1000);
+
+                        if (serverNow < writingEnd) {
+                            const diff = Math.floor((writingEnd.getTime() - serverNow.getTime()) / 1000);
+                            setTimeRemainingSeconds(diff);
+                            setExamStatus('STRUCTURED_WRITING');
+                        } else if (serverNow < uploadEnd) {
+                            const diff = Math.floor((uploadEnd.getTime() - serverNow.getTime()) / 1000);
+                            setTimeRemainingSeconds(diff);
+                            setExamStatus('STRUCTURED_UPLOADING');
+                        } else {
+                            setTimeRemainingSeconds(0);
+                            setExamStatus('SUBMITTED');
+                        }
+                    } else {
+                        // In Intermission break!
+                        const breakMins = parseInt(p.breakIntervalMinutes || 15, 10);
+                        const mcqSubAt = new Date(sub.mcqSubmittedAt);
+                        const breakEnd = new Date(mcqSubAt.getTime() + breakMins * 60 * 1000);
+                        const diffBreak = Math.floor((breakEnd.getTime() - serverNow.getTime()) / 1000);
+                        setTimeRemainingSeconds(Math.max(0, diffBreak));
+                        setExamStatus('INTERMISSION');
                     }
                     setLoading(false);
                     return;
                 }
             }
 
-            // Check Scheduled vs Flexible Timer
-            if (p.timerMode === 'SCHEDULED' && p.scheduledStartTime) {
-                const startTime = new Date(p.scheduledStartTime);
+            // 3. Check Standalone STRUCTURED Paper Flow
+            if (pType === 'STRUCTURED') {
+                if (sub && sub.startedAt) {
+                    const sStart = new Date(sub.startedAt);
+                    const strDurMins = parseInt(p.durationMinutes || p.structuredDurationMinutes || 60, 10);
+                    const strUploadMins = parseInt(p.structuredUploadMinutes || 15, 10);
+                    const writingEnd = new Date(sStart.getTime() + strDurMins * 60 * 1000);
+                    const uploadEnd = new Date(writingEnd.getTime() + strUploadMins * 60 * 1000);
+
+                    if (serverNow < writingEnd) {
+                        const diff = Math.floor((writingEnd.getTime() - serverNow.getTime()) / 1000);
+                        setTimeRemainingSeconds(diff);
+                        setExamStatus('STRUCTURED_WRITING');
+                    } else if (serverNow < uploadEnd) {
+                        const diff = Math.floor((uploadEnd.getTime() - serverNow.getTime()) / 1000);
+                        setTimeRemainingSeconds(diff);
+                        setExamStatus('STRUCTURED_UPLOADING');
+                    } else {
+                        setTimeRemainingSeconds(0);
+                        setExamStatus('SUBMITTED');
+                    }
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            // 4. Check Scheduled Timer vs Flexible Timer
+            const isScheduled = (p.mcqTimerMode === 'SCHEDULED' || p.timerMode === 'SCHEDULED');
+            const scheduledStartTime = p.mcqScheduledStartTime || p.scheduledStartTime;
+
+            if (isScheduled && scheduledStartTime) {
+                const startTime = new Date(scheduledStartTime);
                 const diffToStart = Math.floor((startTime.getTime() - serverNow.getTime()) / 1000);
 
                 if (diffToStart > 0) {
                     setTimeUntilStartSeconds(diffToStart);
                     setExamStatus('COUNTDOWN_TO_START');
                 } else {
-                    const examEndTime = new Date(startTime.getTime() + p.durationMinutes * 60 * 1000);
+                    const mcqDurMins = parseInt(p.durationMinutes || p.mcqDurationMinutes || 60, 10);
+                    const examEndTime = new Date(startTime.getTime() + mcqDurMins * 60 * 1000);
                     const diffToEnd = Math.floor((examEndTime.getTime() - serverNow.getTime()) / 1000);
 
                     if (diffToEnd > 0) {
@@ -158,7 +248,8 @@ const MCQPaperScreen = ({ route, navigation }) => {
                 // Flexible Mode
                 if (sub && sub.status === 'IN_PROGRESS' && sub.startedAt) {
                     const startedAt = new Date(sub.startedAt);
-                    const examEndTime = new Date(startedAt.getTime() + p.durationMinutes * 60 * 1000);
+                    const mcqDurMins = parseInt(p.durationMinutes || p.mcqDurationMinutes || 60, 10);
+                    const examEndTime = new Date(startedAt.getTime() + mcqDurMins * 60 * 1000);
                     const diffToEnd = Math.floor((examEndTime.getTime() - serverNow.getTime()) / 1000);
 
                     if (diffToEnd > 0) {
@@ -212,6 +303,48 @@ const MCQPaperScreen = ({ route, navigation }) => {
             }, 1000);
         }
 
+        if (examStatus === 'INTERMISSION' && timeRemainingSeconds !== null) {
+            timerIntervalRef.current = setInterval(() => {
+                setTimeRemainingSeconds(prev => {
+                    if (prev <= 1) {
+                        clearInterval(timerIntervalRef.current);
+                        handleStartStructuredSection();
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        }
+
+        if (examStatus === 'STRUCTURED_WRITING' && timeRemainingSeconds !== null) {
+            timerIntervalRef.current = setInterval(() => {
+                setTimeRemainingSeconds(prev => {
+                    if (prev <= 1) {
+                        clearInterval(timerIntervalRef.current);
+                        const uploadSecs = (paperData?.paper?.structuredUploadMinutes || 15) * 60;
+                        setTimeRemainingSeconds(uploadSecs);
+                        setExamStatus('STRUCTURED_UPLOADING');
+                        Alert.alert("Writing Time Over", "Writing time is complete! You now have time to upload your answer sheets.");
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        }
+
+        if (examStatus === 'STRUCTURED_UPLOADING' && timeRemainingSeconds !== null) {
+            timerIntervalRef.current = setInterval(() => {
+                setTimeRemainingSeconds(prev => {
+                    if (prev <= 1) {
+                        clearInterval(timerIntervalRef.current);
+                        handleAutoSubmit();
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        }
+
         return () => {
             if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
         };
@@ -221,17 +354,95 @@ const MCQPaperScreen = ({ route, navigation }) => {
         if (!paperData?.paper?.id) return;
         try {
             setLoading(true);
-            const res = await api.post(`papers/${paperData.paper.id}/start`);
-            setSubmission(res.data.submission);
-            const durationSecs = (paperData.paper.durationMinutes || 60) * 60;
-            setTimeRemainingSeconds(durationSecs);
-            setExamStatus('IN_PROGRESS');
+            const p = paperData.paper;
+            const pType = p.paperType || (paperData.content?.contentType === 'sPaper' ? 'STRUCTURED' : 'MCQ');
+
+            if (pType === 'STRUCTURED') {
+                const res = await api.post(`papers/${p.id}/start`, { section: 'STRUCTURED' });
+                setSubmission(res.data.submission);
+                const durationSecs = (p.durationMinutes || p.structuredDurationMinutes || 60) * 60;
+                setTimeRemainingSeconds(durationSecs);
+                setExamStatus('STRUCTURED_WRITING');
+            } else {
+                const res = await api.post(`papers/${p.id}/start`, { section: 'MCQ' });
+                setSubmission(res.data.submission);
+                const durationSecs = (p.durationMinutes || p.mcqDurationMinutes || 60) * 60;
+                setTimeRemainingSeconds(durationSecs);
+                setExamStatus('IN_PROGRESS');
+            }
         } catch (err) {
             console.error("Failed to start paper session:", err);
-            Alert.alert("Error", "Failed to start exam. Please try again.");
+            Alert.alert("Error", err.response?.data?.error || "Failed to start exam. Please try again.");
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleStartStructuredSection = async () => {
+        if (!paperData?.paper?.id) return;
+        try {
+            setLoading(true);
+            const res = await api.post(`papers/${paperData.paper.id}/start`, { section: 'STRUCTURED' });
+            setSubmission(res.data.submission);
+            const durationSecs = (paperData.paper.structuredDurationMinutes || paperData.paper.durationMinutes || 60) * 60;
+            setTimeRemainingSeconds(durationSecs);
+            setExamStatus('STRUCTURED_WRITING');
+            Alert.alert("Part 2 Started", "Structured essay section has begun! Your writing time is active.");
+        } catch (err) {
+            console.error("Failed to start structured section:", err);
+            Alert.alert("Error", err.response?.data?.error || "Failed to start Part 2.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleUnlockUploadEarly = () => {
+        const uploadSecs = (paperData?.paper?.structuredUploadMinutes || 15) * 60;
+        setTimeRemainingSeconds(uploadSecs);
+        setExamStatus('STRUCTURED_UPLOADING');
+        Alert.alert("Upload Window Active", "You can now attach and upload clear photos of your answer sheets.");
+    };
+
+    const handlePickImage = (source) => {
+        const options = {
+            mediaType: 'photo',
+            quality: 0.8,
+            selectionLimit: 5
+        };
+
+        const callback = (res) => {
+            if (res.didCancel) return;
+            if (res.errorCode) {
+                Alert.alert("Error", res.errorMessage || "Failed to pick image");
+                return;
+            }
+            if (res.assets && res.assets.length > 0) {
+                setAnswerImages(prev => [...prev, ...res.assets].slice(0, 10));
+            }
+        };
+
+        if (source === 'camera') {
+            launchCamera(options, callback);
+        } else {
+            launchImageLibrary(options, callback);
+        }
+    };
+
+    const handleRemoveImage = (index) => {
+        setAnswerImages(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleOpenQuestionPaper = () => {
+        const p = paperData?.paper;
+        const file = p?.structuredPaperFile || p?.mcqPaperFile || paperData?.content?.fileName;
+        if (!file) {
+            Alert.alert("File Not Found", "The master question paper file is not available.");
+            return;
+        }
+        let url = file.startsWith('http') ? file : `${IMAGE_URL}documents/${file}`;
+        Linking.openURL(url).catch(() => {
+            Alert.alert("Error", "Could not open question paper. Please make sure a PDF viewer or browser is installed.");
+        });
     };
 
     const handleSelectOption = (questionId, optionId) => {
@@ -252,23 +463,104 @@ const MCQPaperScreen = ({ route, navigation }) => {
         setSubmitting(true);
         setShowConfirmModal(false);
         try {
-            const answersArray = Object.keys(selectedAnswers).map(qId => ({
-                questionId: parseInt(qId),
-                selectedOptionId: selectedAnswers[qId]
-            }));
+            const p = paperData.paper;
+            const pType = p.paperType || (paperData.content?.contentType === 'sPaper' ? 'STRUCTURED' : 'MCQ');
 
-            const res = await api.post(`papers/${paperData.paper.id}/submit`, {
-                answers: answersArray
-            });
+            if (pType === 'BOTH') {
+                if (examStatus === 'IN_PROGRESS') {
+                    // Submitting Part 1 MCQ
+                    const answersArray = Object.keys(selectedAnswers).map(qId => ({
+                        questionId: parseInt(qId),
+                        selectedOptionId: selectedAnswers[qId]
+                    }));
 
-            setSubmission(res.data.submission);
-            setExamStatus('SUBMITTED');
-            // Refresh to get correct answers for review
-            loadPaper();
-            Alert.alert("Exam Completed", `Your answers have been submitted! Score: ${res.data.score}%`);
+                    const res = await api.post(`papers/${p.id}/submit`, {
+                        section: 'MCQ',
+                        answers: answersArray
+                    });
+
+                    setSubmission(res.data.submission);
+                    const breakMins = parseInt(p.breakIntervalMinutes || 15, 10);
+                    setTimeRemainingSeconds(breakMins * 60);
+                    setExamStatus('INTERMISSION');
+                    Alert.alert(
+                        "Part 1 (MCQ) Completed",
+                        `Your MCQ score has been recorded (${res.data.mcqScore ?? res.data.score} marks). You have a ${breakMins} minute break before Part 2 begins.`
+                    );
+                    return;
+                } else if (examStatus === 'STRUCTURED_WRITING' || examStatus === 'STRUCTURED_UPLOADING') {
+                    // Submitting Part 2 Structured
+                    if (answerImages.length === 0) {
+                        Alert.alert("Missing Answer Sheets", "Please take photos or select your answer sheets before submitting.");
+                        setSubmitting(false);
+                        return;
+                    }
+
+                    const formData = new FormData();
+                    formData.append('section', 'STRUCTURED');
+                    answerImages.forEach((img, idx) => {
+                        formData.append('answerImages', {
+                            uri: Platform.OS === 'android' ? img.uri : img.uri.replace('file://', ''),
+                            type: img.type || 'image/jpeg',
+                            name: img.fileName || `page_${idx + 1}_${Date.now()}.jpg`
+                        });
+                    });
+
+                    const res = await api.post(`papers/${p.id}/submit`, formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' }
+                    });
+
+                    setSubmission(res.data.submission);
+                    setExamStatus('SUBMITTED');
+                    loadPaper(activeContentId);
+                    Alert.alert("Exam Completed", "Your structured paper has been submitted successfully! Awaiting teacher evaluation.");
+                    return;
+                }
+            } else if (pType === 'STRUCTURED') {
+                if (answerImages.length === 0) {
+                    Alert.alert("Missing Answer Sheets", "Please take photos or select your answer sheets before submitting.");
+                    setSubmitting(false);
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('section', 'STRUCTURED');
+                answerImages.forEach((img, idx) => {
+                    formData.append('answerImages', {
+                        uri: Platform.OS === 'android' ? img.uri : img.uri.replace('file://', ''),
+                        type: img.type || 'image/jpeg',
+                        name: img.fileName || `page_${idx + 1}_${Date.now()}.jpg`
+                    });
+                });
+
+                const res = await api.post(`papers/${p.id}/submit`, formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+
+                setSubmission(res.data.submission);
+                setExamStatus('SUBMITTED');
+                loadPaper(activeContentId);
+                Alert.alert("Submitted", "Your structured paper has been submitted successfully! Awaiting evaluation.");
+                return;
+            } else {
+                // Standalone MCQ
+                const answersArray = Object.keys(selectedAnswers).map(qId => ({
+                    questionId: parseInt(qId),
+                    selectedOptionId: selectedAnswers[qId]
+                }));
+
+                const res = await api.post(`papers/${p.id}/submit`, {
+                    answers: answersArray
+                });
+
+                setSubmission(res.data.submission);
+                setExamStatus('SUBMITTED');
+                loadPaper(activeContentId);
+                Alert.alert("Exam Completed", `Your answers have been submitted! Score: ${res.data.score}%`);
+            }
         } catch (err) {
             console.error("Failed to submit exam:", err);
-            Alert.alert("Error", "Submission failed. Please check connection and try again.");
+            Alert.alert("Error", err.response?.data?.error || "Submission failed. Please check connection and try again.");
         } finally {
             setSubmitting(false);
         }
@@ -512,7 +804,7 @@ const MCQPaperScreen = ({ route, navigation }) => {
             }
         };
 
-        if (examStatus === 'IN_PROGRESS') {
+        if (examStatus === 'IN_PROGRESS' || examStatus === 'STRUCTURED_WRITING' || examStatus === 'STRUCTURED_UPLOADING') {
             Alert.alert(
                 "Leave Exam?",
                 "Your exam timer is currently running! Are you sure you want to leave?",
@@ -540,14 +832,16 @@ const MCQPaperScreen = ({ route, navigation }) => {
                 </TouchableOpacity>
 
                 <View style={styles.headerTitleWrap}>
-                    <Text style={[styles.headerSubBadge, { color: COLORS.primary }]}>MCQ Examination</Text>
+                    <Text style={[styles.headerSubBadge, { color: COLORS.primary }]}>
+                        {paperData?.paper?.paperType === 'BOTH' ? 'COMBINED EXAMINATION' : (paperData?.paper?.paperType === 'STRUCTURED' || paperData?.content?.contentType === 'sPaper' ? 'STRUCTURED ESSAY PAPER' : 'MCQ EXAMINATION')}
+                    </Text>
                     <Text style={[styles.headerTitle, { color: '#0F172A' }]} numberOfLines={1}>
-                        {paperData?.content?.title || activePaperTitle || "MCQ Paper"}
+                        {paperData?.content?.title || activePaperTitle || "Exam Paper"}
                     </Text>
                 </View>
 
                 {/* Status Indicator / Timer in Header */}
-                {examStatus === 'IN_PROGRESS' && (
+                {(examStatus === 'IN_PROGRESS' || examStatus === 'INTERMISSION' || examStatus === 'STRUCTURED_WRITING' || examStatus === 'STRUCTURED_UPLOADING') && (
                     <View style={styles.headerRightActions}>
                         <View style={[
                             styles.timerPill,
@@ -566,13 +860,15 @@ const MCQPaperScreen = ({ route, navigation }) => {
                             </Text>
                         </View>
 
-                        <TouchableOpacity
-                            style={styles.paletteToggleBtn}
-                            onPress={() => setShowPaletteModal(true)}
-                        >
-                            <Icon name="grid" size={18} color="#ffffff" />
-                            <Text style={styles.paletteToggleText}>{answeredCount}/{questions.length}</Text>
-                        </TouchableOpacity>
+                        {examStatus === 'IN_PROGRESS' && (
+                            <TouchableOpacity
+                                style={styles.paletteToggleBtn}
+                                onPress={() => setShowPaletteModal(true)}
+                            >
+                                <Icon name="grid" size={18} color="#ffffff" />
+                                <Text style={styles.paletteToggleText}>{answeredCount}/{questions.length}</Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 )}
             </View>
@@ -793,27 +1089,284 @@ const MCQPaperScreen = ({ route, navigation }) => {
                 </View>
             )}
 
+            {/* 🌟 3.5 INTERMISSION / BREAK STATE (Combined Papers) 🌟 */}
+            {examStatus === 'INTERMISSION' && (
+                <View style={styles.intermissionCenterWrap}>
+                    <View style={styles.breakIconCircle}>
+                        <Icon name="coffee" size={48} color="#8B5CF6" />
+                    </View>
+
+                    <View style={styles.breakBadge}>
+                        <Text style={styles.breakBadgeText}>INTERMISSION BREAK</Text>
+                    </View>
+
+                    <Text style={styles.breakTitle}>Part 1 (MCQ) Completed!</Text>
+                    <Text style={styles.breakSubtitle}>
+                        Take a short break before Part 2 (Structured Essay) begins. You can start immediately or wait for the timer.
+                    </Text>
+
+                    <View style={styles.breakCard}>
+                        <Text style={styles.breakCardLabel}>BREAK REMAINING</Text>
+                        <Text style={styles.breakTimerValue}>{formatSeconds(timeRemainingSeconds)}</Text>
+                        <Text style={styles.breakCardNotice}>
+                            Part 2 will automatically begin when the timer reaches zero.
+                        </Text>
+                    </View>
+
+                    <TouchableOpacity
+                        style={styles.startPart2Btn}
+                        onPress={handleStartStructuredSection}
+                        activeOpacity={0.85}
+                    >
+                        <LinearGradient
+                            colors={['#7C3AED', '#6D28D9']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.startBtnGradient}
+                        >
+                            <Icon name="pencil" size={20} color="#FFFFFF" />
+                            <Text style={styles.startBtnText}>START PART 2 NOW</Text>
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {/* 🌟 3.6 STRUCTURED WRITING STATE 🌟 */}
+            {examStatus === 'STRUCTURED_WRITING' && (
+                <ScrollView contentContainerStyle={styles.structuredScroll} showsVerticalScrollIndicator={false}>
+                    {/* Header Card */}
+                    <View style={styles.structuredHeaderCard}>
+                        <View style={styles.structuredBadge}>
+                            <Icon name="file-document-edit-outline" size={14} color="#4F46E5" />
+                            <Text style={styles.structuredBadgeText}>Part 2: Structured Essay</Text>
+                        </View>
+                        <Text style={styles.structuredTitleText}>Writing Time Active</Text>
+                        <Text style={styles.structuredSubtitleText}>
+                            Download the question paper, write your answers on blank A4 sheets, and upload your pages before the deadline.
+                        </Text>
+
+                        {/* Writing Timer Box */}
+                        <View style={styles.writingTimerBox}>
+                            <Icon name="timer-sand" size={24} color="#EA580C" />
+                            <View style={{ marginLeft: 12, flex: 1 }}>
+                                <Text style={styles.writingTimerLabel}>WRITING TIME REMAINING</Text>
+                                <Text style={styles.writingTimerValue}>{formatSeconds(timeRemainingSeconds)}</Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* Question Paper Download Card */}
+                    <View style={styles.questionPaperBox}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <View style={styles.docIconCircle}>
+                                <Icon name="file-pdf-box" size={32} color="#DC2626" />
+                            </View>
+                            <View style={{ marginLeft: 14, flex: 1 }}>
+                                <Text style={styles.questionPaperTitle} numberOfLines={1}>
+                                    {paperData?.paper?.structuredPaperFile || paperData?.content?.title || "Structured Question Paper"}
+                                </Text>
+                                <Text style={styles.questionPaperSub}>Official Examination Sheet</Text>
+                            </View>
+                        </View>
+
+                        <TouchableOpacity
+                            style={styles.downloadPaperBtn}
+                            onPress={handleOpenQuestionPaper}
+                            activeOpacity={0.8}
+                        >
+                            <Icon name="file-download-outline" size={20} color="#FFFFFF" />
+                            <Text style={styles.downloadPaperBtnText}>View / Download Question Paper</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Writing Guidelines Box */}
+                    <View style={styles.guidelinesBox}>
+                        <View style={styles.guidelinesHeader}>
+                            <Icon name="shield-check-outline" size={18} color="#2563EB" />
+                            <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E293B', marginLeft: 8 }}>
+                                Student Guidelines
+                            </Text>
+                        </View>
+                        <Text style={styles.guidelineItem}>• Write clearly with dark blue or black ink.</Text>
+                        <Text style={styles.guidelineItem}>• Number each page clearly (e.g. Page 1, Page 2).</Text>
+                        <Text style={styles.guidelineItem}>• Include your Student ID / Index on top of each page.</Text>
+                        <Text style={styles.guidelineItem}>• Upload window opens when writing time finishes, or tap below to unlock early.</Text>
+                    </View>
+
+                    {/* Unlock Upload Early Button */}
+                    <TouchableOpacity
+                        style={styles.unlockUploadBtn}
+                        onPress={handleUnlockUploadEarly}
+                        activeOpacity={0.85}
+                    >
+                        <Icon name="cloud-upload" size={20} color="#FFFFFF" />
+                        <Text style={styles.unlockUploadBtnText}>I've Finished Writing - Upload Answers</Text>
+                    </TouchableOpacity>
+                </ScrollView>
+            )}
+
+            {/* 🌟 3.7 STRUCTURED UPLOADING STATE 🌟 */}
+            {examStatus === 'STRUCTURED_UPLOADING' && (
+                <ScrollView contentContainerStyle={styles.structuredScroll} showsVerticalScrollIndicator={false}>
+                    {/* Header Card */}
+                    <View style={styles.structuredHeaderCard}>
+                        <View style={[styles.structuredBadge, { backgroundColor: '#FEF3C7' }]}>
+                            <Icon name="camera-plus" size={14} color="#D97706" />
+                            <Text style={[styles.structuredBadgeText, { color: '#D97706' }]}>Answer Sheet Submission</Text>
+                        </View>
+                        <Text style={styles.structuredTitleText}>Upload Answer Sheets</Text>
+                        <Text style={styles.structuredSubtitleText}>
+                            Take photos or select scanned documents of your answer sheets. Ensure good lighting and readability.
+                        </Text>
+
+                        {/* Upload Timer Box */}
+                        <View style={[styles.writingTimerBox, { borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }]}>
+                            <Icon name="clock-alert-outline" size={24} color="#D97706" />
+                            <View style={{ marginLeft: 12, flex: 1 }}>
+                                <Text style={[styles.writingTimerLabel, { color: '#B45309' }]}>UPLOAD TIME REMAINING</Text>
+                                <Text style={[styles.writingTimerValue, { color: '#B45309' }]}>{formatSeconds(timeRemainingSeconds)}</Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* Image Pickers Row */}
+                    <View style={styles.pickButtonsRow}>
+                        <TouchableOpacity
+                            style={styles.pickBtn}
+                            onPress={() => handlePickImage('camera')}
+                            activeOpacity={0.8}
+                        >
+                            <Icon name="camera" size={24} color="#4F46E5" />
+                            <Text style={styles.pickBtnText}>Take Photo</Text>
+                            <Text style={styles.pickBtnSub}>Using Camera</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.pickBtn}
+                            onPress={() => handlePickImage('gallery')}
+                            activeOpacity={0.8}
+                        >
+                            <Icon name="image-multiple" size={24} color="#2563EB" />
+                            <Text style={styles.pickBtnText}>Choose Photos</Text>
+                            <Text style={styles.pickBtnSub}>From Gallery</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Attached Photos Preview */}
+                    <View style={styles.uploadedImagesSection}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                            <Text style={{ fontSize: 15, fontWeight: '700', color: '#0F172A' }}>
+                                Attached Pages ({answerImages.length}/10)
+                            </Text>
+                            <Text style={styles.uploadedCountText}>
+                                {answerImages.length === 0 ? 'No files added' : `${answerImages.length} ready`}
+                            </Text>
+                        </View>
+
+                        {answerImages.length === 0 ? (
+                            <View style={styles.emptyUploadBox}>
+                                <Icon name="file-image-outline" size={40} color="#CBD5E1" />
+                                <Text style={styles.emptyUploadTitle}>No pages attached yet</Text>
+                                <Text style={styles.emptyUploadSub}>Tap 'Take Photo' or 'Choose Photos' above to attach your written sheets.</Text>
+                            </View>
+                        ) : (
+                            <View style={styles.imageThumbnailsGrid}>
+                                {answerImages.map((img, idx) => (
+                                    <View key={idx} style={styles.thumbnailBox}>
+                                        <Image source={{ uri: img.uri }} style={styles.pageThumbImage} />
+                                        <View style={styles.pageNumberBadge}>
+                                            <Text style={styles.pageNumberBadgeText}>Page {idx + 1}</Text>
+                                        </View>
+                                        <TouchableOpacity
+                                            style={styles.deleteThumbBtn}
+                                            onPress={() => handleRemoveImage(idx)}
+                                        >
+                                            <Icon name="close" size={14} color="#FFFFFF" />
+                                        </TouchableOpacity>
+                                    </View>
+                                ))}
+                            </View>
+                        )}
+                    </View>
+
+                    {/* Final Submit Button */}
+                    <TouchableOpacity
+                        style={[
+                            styles.finalSubmitBtn,
+                            answerImages.length === 0 && { opacity: 0.6 }
+                        ]}
+                        disabled={submitting || answerImages.length === 0}
+                        onPress={() => setShowConfirmModal(true)}
+                        activeOpacity={0.85}
+                    >
+                        <LinearGradient
+                            colors={['#059669', '#10B981']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.startBtnGradient}
+                        >
+                            {submitting ? (
+                                <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                                <>
+                                    <Icon name="send-check" size={20} color="#FFFFFF" />
+                                    <Text style={styles.startBtnText}>SUBMIT {answerImages.length} ANSWER SHEET{answerImages.length === 1 ? '' : 'S'}</Text>
+                                </>
+                            )}
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </ScrollView>
+            )}
+
             {/* 🌟 4. SUBMITTED / RESULTS STATE 🌟 */}
             {examStatus === 'SUBMITTED' && (
                 <ScrollView contentContainerStyle={styles.resultScroll} showsVerticalScrollIndicator={false}>
                     {/* Score Banner */}
                     <View style={styles.scoreBanner}>
-                        <View style={styles.trophyCircle}>
-                            <Icon name="trophy-award" size={42} color="#ffffff" />
+                        <View style={[
+                            styles.trophyCircle,
+                            submission?.status === 'PENDING_EVALUATION' && { backgroundColor: '#F59E0B' }
+                        ]}>
+                            <Icon
+                                name={submission?.status === 'PENDING_EVALUATION' ? "file-clock" : "trophy-award"}
+                                size={40}
+                                color="#ffffff"
+                            />
                         </View>
 
                         <View style={[
                             styles.passFailBadge,
-                            (submission?.score || 0) >= (paperData?.paper?.passMarks || 40) ? styles.passBadge : styles.failBadge
+                            submission?.status === 'PENDING_EVALUATION'
+                                ? { backgroundColor: '#FEF3C7' }
+                                : (submission?.score || 0) >= (paperData?.paper?.passMarks || 40) ? styles.passBadge : styles.failBadge
                         ]}>
-                            <Text style={styles.passFailText}>
-                                {(submission?.score || 0) >= (paperData?.paper?.passMarks || 40) ? 'EXAM PASSED' : 'EXAM FAILED'}
+                            <Text style={[
+                                styles.passFailText,
+                                submission?.status === 'PENDING_EVALUATION' && { color: '#D97706' }
+                            ]}>
+                                {submission?.status === 'PENDING_EVALUATION'
+                                    ? 'PENDING TEACHER EVALUATION'
+                                    : (submission?.score || 0) >= (paperData?.paper?.passMarks || 40) ? 'EXAM PASSED' : 'EXAM FAILED'}
                             </Text>
                         </View>
 
-                        <Text style={styles.scorePercentage}>{submission?.score || 0}%</Text>
+                        {submission?.status === 'PENDING_EVALUATION' && (!paperData?.paper?.paperType || paperData?.paper?.paperType === 'STRUCTURED') ? (
+                            <Text style={[styles.scorePercentage, { fontSize: 28, color: '#D97706', marginVertical: 8 }]}>
+                                Submitted
+                            </Text>
+                        ) : (
+                            <Text style={styles.scorePercentage}>
+                                {submission?.finalMarks ?? submission?.totalScore ?? submission?.score ?? 0}%
+                            </Text>
+                        )}
+
                         <Text style={styles.scoreDetail}>
-                            You scored {submission?.correctAnswers || 0} of {submission?.totalQuestions || questions.length} questions correctly.
+                            {paperData?.paper?.paperType === 'BOTH'
+                                ? `Part 1 MCQ: ${submission?.mcqScore ?? submission?.score ?? 0}% • Part 2: ${submission?.structuredMarks !== null && submission?.structuredMarks !== undefined ? `${submission.structuredMarks} Marks` : 'Awaiting Teacher Evaluation'}`
+                                : (paperData?.paper?.paperType === 'STRUCTURED' || paperData?.content?.contentType === 'sPaper')
+                                    ? `Structured Paper submitted on ${submission?.structuredSubmittedAt ? new Date(submission.structuredSubmittedAt).toLocaleDateString() : 'today'}. Marks will appear after teacher review.`
+                                    : `You scored ${submission?.correctAnswers || 0} of ${submission?.totalQuestions || questions.length} questions correctly.`
+                            }
                         </Text>
 
                         {/* Summary Numbers */}
@@ -822,90 +1375,144 @@ const MCQPaperScreen = ({ route, navigation }) => {
                                 <Text style={styles.statLabel}>Pass Mark</Text>
                                 <Text style={styles.statValue}>{paperData?.paper?.passMarks || 40}%</Text>
                             </View>
-                            <View style={styles.resultStatBox}>
-                                <Text style={styles.statLabel}>Correct</Text>
-                                <Text style={[styles.statValue, { color: '#34d399' }]}>{submission?.correctAnswers || 0}</Text>
-                            </View>
-                            <View style={styles.resultStatBox}>
-                                <Text style={styles.statLabel}>Total</Text>
-                                <Text style={styles.statValue}>{questions.length}</Text>
-                            </View>
+                            {paperData?.paper?.paperType === 'BOTH' ? (
+                                <>
+                                    <View style={styles.resultStatBox}>
+                                        <Text style={styles.statLabel}>Part 1 MCQ</Text>
+                                        <Text style={[styles.statValue, { color: '#34d399' }]}>{submission?.mcqScore ?? submission?.score ?? 0}%</Text>
+                                    </View>
+                                    <View style={styles.resultStatBox}>
+                                        <Text style={styles.statLabel}>Part 2 Structured</Text>
+                                        <Text style={[styles.statValue, { color: '#6366F1' }]}>
+                                            {submission?.structuredMarks !== null && submission?.structuredMarks !== undefined ? `${submission.structuredMarks}` : 'Pending'}
+                                        </Text>
+                                    </View>
+                                </>
+                            ) : (paperData?.paper?.paperType === 'STRUCTURED' || paperData?.content?.contentType === 'sPaper') ? (
+                                <>
+                                    <View style={styles.resultStatBox}>
+                                        <Text style={styles.statLabel}>Evaluation</Text>
+                                        <Text style={[styles.statValue, { color: submission?.status === 'EVALUATED' ? '#16A34A' : '#D97706' }]}>
+                                            {submission?.status === 'EVALUATED' ? 'Marked' : 'In Review'}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.resultStatBox}>
+                                        <Text style={styles.statLabel}>Score</Text>
+                                        <Text style={[styles.statValue, { color: '#4F46E5' }]}>
+                                            {submission?.structuredMarks !== null && submission?.structuredMarks !== undefined ? `${submission.structuredMarks}` : '-'}
+                                        </Text>
+                                    </View>
+                                </>
+                            ) : (
+                                <>
+                                    <View style={styles.resultStatBox}>
+                                        <Text style={styles.statLabel}>Correct</Text>
+                                        <Text style={[styles.statValue, { color: '#34d399' }]}>{submission?.correctAnswers || 0}</Text>
+                                    </View>
+                                    <View style={styles.resultStatBox}>
+                                        <Text style={styles.statLabel}>Total</Text>
+                                        <Text style={styles.statValue}>{questions.length}</Text>
+                                    </View>
+                                </>
+                            )}
                         </View>
+
+                        {/* Leaderboard CTA Button */}
+                        <TouchableOpacity
+                            style={styles.leaderboardCtaBtn}
+                            onPress={() => navigation.navigate('Leaderboard', { contentId: activeContentId || paperData?.content?.id })}
+                            activeOpacity={0.85}
+                        >
+                            <LinearGradient
+                                colors={['#4F46E5', '#6366F1']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.leaderboardCtaGradient}
+                            >
+                                <Icon name="trophy-variant" size={20} color="#FFFFFF" />
+                                <Text style={styles.leaderboardCtaText}>View Exam Leaderboard & Rankings</Text>
+                                <Icon name="chevron-right" size={20} color="#FFFFFF" />
+                            </LinearGradient>
+                        </TouchableOpacity>
                     </View>
 
                     {/* Question Review Section */}
-                    <View style={styles.reviewHeader}>
-                        <Icon name="eye-outline" size={20} color="#818cf8" />
-                        <Text style={styles.reviewHeaderText}>Question Review</Text>
-                    </View>
-
-                    {questions.map((q, idx) => {
-                        const studentAnswerId = selectedAnswers[q.id];
-                        return (
-                            <View key={q.id || idx} style={styles.reviewCard}>
-                                <View style={styles.reviewCardTop}>
-                                    <Text style={styles.reviewQNum}>Question {idx + 1}</Text>
-                                </View>
-                                <Text style={styles.reviewQText}>{q.questionText}</Text>
-
-                                {q.image && (
-                                    <View style={styles.qImageBox}>
-                                        <Image
-                                            source={{ uri: `https://imacampus.online/api/storage/documents/${q.image}` }}
-                                            style={styles.qImage}
-                                            resizeMode="contain"
-                                        />
-                                    </View>
-                                )}
-
-                                <View style={styles.reviewOptionsList}>
-                                    {(q.options || []).map((opt, oIdx) => {
-                                        const isChosen = studentAnswerId === opt.id;
-                                        const isCorrect = opt.isCorrect;
-
-                                        let optStyle = styles.reviewOpt;
-                                        if (isCorrect) optStyle = [styles.reviewOpt, styles.reviewOptCorrect];
-                                        else if (isChosen && !isCorrect) optStyle = [styles.reviewOpt, styles.reviewOptWrong];
-
-                                        return (
-                                            <View key={opt.id || oIdx} style={optStyle}>
-                                                <View style={[
-                                                    styles.reviewOptCircle,
-                                                    isCorrect && { backgroundColor: '#059669' },
-                                                    isChosen && !isCorrect && { backgroundColor: '#dc2626' }
-                                                ]}>
-                                                    {isCorrect ? (
-                                                        <Icon name="check" size={14} color="#ffffff" />
-                                                    ) : isChosen ? (
-                                                        <Icon name="close" size={14} color="#ffffff" />
-                                                    ) : (
-                                                        <Text style={styles.reviewOptCircleText}>{oIdx + 1}</Text>
-                                                    )}
-                                                </View>
-                                                <Text style={[
-                                                    styles.reviewOptText,
-                                                    isCorrect && { color: '#34d399', fontWeight: 'bold' },
-                                                    isChosen && !isCorrect && { color: '#f87171' }
-                                                ]}>
-                                                    {opt.optionText}
-                                                </Text>
-                                                {isCorrect && (
-                                                    <View style={styles.correctPill}>
-                                                        <Text style={styles.correctPillText}>Correct</Text>
-                                                    </View>
-                                                )}
-                                                {isChosen && !isCorrect && (
-                                                    <View style={styles.wrongPill}>
-                                                        <Text style={styles.wrongPillText}>Your Choice</Text>
-                                                    </View>
-                                                )}
-                                            </View>
-                                        );
-                                    })}
-                                </View>
+                    {questions.length > 0 && (
+                        <>
+                            <View style={styles.reviewHeader}>
+                                <Icon name="eye-outline" size={20} color="#818cf8" />
+                                <Text style={styles.reviewHeaderText}>Question Review</Text>
                             </View>
-                        );
-                    })}
+
+                            {questions.map((q, idx) => {
+                                const studentAnswerId = selectedAnswers[q.id];
+                                return (
+                                    <View key={q.id || idx} style={styles.reviewCard}>
+                                        <View style={styles.reviewCardTop}>
+                                            <Text style={styles.reviewQNum}>Question {idx + 1}</Text>
+                                        </View>
+                                        <Text style={styles.reviewQText}>{q.questionText}</Text>
+
+                                        {q.image && (
+                                            <View style={styles.qImageBox}>
+                                                <Image
+                                                    source={{ uri: `https://imacampus.online/api/storage/documents/${q.image}` }}
+                                                    style={styles.qImage}
+                                                    resizeMode="contain"
+                                                />
+                                            </View>
+                                        )}
+
+                                        <View style={styles.reviewOptionsList}>
+                                            {(q.options || []).map((opt, oIdx) => {
+                                                const isChosen = studentAnswerId === opt.id;
+                                                const isCorrect = opt.isCorrect;
+
+                                                let optStyle = styles.reviewOpt;
+                                                if (isCorrect) optStyle = [styles.reviewOpt, styles.reviewOptCorrect];
+                                                else if (isChosen && !isCorrect) optStyle = [styles.reviewOpt, styles.reviewOptWrong];
+
+                                                return (
+                                                    <View key={opt.id || oIdx} style={optStyle}>
+                                                        <View style={[
+                                                            styles.reviewOptCircle,
+                                                            isCorrect && { backgroundColor: '#059669' },
+                                                            isChosen && !isCorrect && { backgroundColor: '#dc2626' }
+                                                        ]}>
+                                                            {isCorrect ? (
+                                                                <Icon name="check" size={14} color="#ffffff" />
+                                                            ) : isChosen ? (
+                                                                <Icon name="close" size={14} color="#ffffff" />
+                                                            ) : (
+                                                                <Text style={styles.reviewOptCircleText}>{oIdx + 1}</Text>
+                                                            )}
+                                                        </View>
+                                                        <Text style={[
+                                                            styles.reviewOptText,
+                                                            isCorrect && { color: '#34d399', fontWeight: 'bold' },
+                                                            isChosen && !isCorrect && { color: '#f87171' }
+                                                        ]}>
+                                                            {opt.optionText}
+                                                        </Text>
+                                                        {isCorrect && (
+                                                            <View style={styles.correctPill}>
+                                                                <Text style={styles.correctPillText}>Correct</Text>
+                                                            </View>
+                                                        )}
+                                                        {isChosen && !isCorrect && (
+                                                            <View style={styles.wrongPill}>
+                                                                <Text style={styles.wrongPillText}>Your Choice</Text>
+                                                            </View>
+                                                        )}
+                                                    </View>
+                                                );
+                                            })}
+                                        </View>
+                                    </View>
+                                );
+                            })}
+                        </>
+                    )}
                 </ScrollView>
             )}
 
@@ -1006,19 +1613,31 @@ const MCQPaperScreen = ({ route, navigation }) => {
                         <View style={styles.confirmIconCircle}>
                             <Icon name="send-check" size={36} color="#ffffff" />
                         </View>
-                        <Text style={styles.confirmTitle}>Submit Examination?</Text>
+                        <Text style={styles.confirmTitle}>
+                            {examStatus === 'STRUCTURED_UPLOADING' ? 'Submit Answer Sheets?' : 'Submit Examination?'}
+                        </Text>
                         <Text style={styles.confirmMsg}>
-                            Are you ready to submit your answers? Once submitted, you cannot change your answers.
+                            {examStatus === 'STRUCTURED_UPLOADING'
+                                ? `Are you ready to submit your ${answerImages.length} answer page(s)? Once submitted, you cannot edit or re-upload.`
+                                : 'Are you ready to submit your answers? Once submitted, you cannot change your answers.'}
                         </Text>
 
-                        <View style={styles.confirmStatsBox}>
-                            <Text style={styles.confirmStatText}>
-                                ✅ Answered: <Text style={{ fontWeight: 'bold', color: '#34d399' }}>{answeredCount}</Text>
-                            </Text>
-                            <Text style={styles.confirmStatText}>
-                                ⚠️ Unanswered: <Text style={{ fontWeight: 'bold', color: unansweredCount > 0 ? '#f87171' : '#94a3b8' }}>{unansweredCount}</Text>
-                            </Text>
-                        </View>
+                        {examStatus === 'STRUCTURED_UPLOADING' ? (
+                            <View style={styles.confirmStatsBox}>
+                                <Text style={styles.confirmStatText}>
+                                    📄 Answer Pages: <Text style={{ fontWeight: 'bold', color: '#4F46E5' }}>{answerImages.length} Sheets</Text>
+                                </Text>
+                            </View>
+                        ) : (
+                            <View style={styles.confirmStatsBox}>
+                                <Text style={styles.confirmStatText}>
+                                    ✅ Answered: <Text style={{ fontWeight: 'bold', color: '#34d399' }}>{answeredCount}</Text>
+                                </Text>
+                                <Text style={styles.confirmStatText}>
+                                    ⚠️ Unanswered: <Text style={{ fontWeight: 'bold', color: unansweredCount > 0 ? '#f87171' : '#94a3b8' }}>{unansweredCount}</Text>
+                                </Text>
+                            </View>
+                        )}
 
                         <View style={styles.confirmActionsRow}>
                             <TouchableOpacity
@@ -1842,6 +2461,350 @@ const styles = StyleSheet.create({
         color: "#FFFFFF",
         fontSize: 13,
         fontWeight: "800"
+    },
+    intermissionCenterWrap: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 24
+    },
+    breakIconCircle: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: "#EDE9FE",
+        justifyContent: "center",
+        alignItems: "center",
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: "#DDD6FE"
+    },
+    breakBadge: {
+        backgroundColor: "#EDE9FE",
+        paddingHorizontal: 12,
+        paddingVertical: 5,
+        borderRadius: 8,
+        marginBottom: 8
+    },
+    breakBadgeText: {
+        color: "#7C3AED",
+        fontSize: 11,
+        fontWeight: "900",
+        letterSpacing: 1
+    },
+    breakTitle: {
+        color: "#0F172A",
+        fontSize: 22,
+        fontWeight: "900",
+        textAlign: "center",
+        marginBottom: 8
+    },
+    breakSubtitle: {
+        color: "#64748B",
+        fontSize: 13,
+        textAlign: "center",
+        maxWidth: 300,
+        lineHeight: 18,
+        marginBottom: 24
+    },
+    breakCard: {
+        backgroundColor: "#FFFFFF",
+        borderRadius: 18,
+        padding: 24,
+        alignItems: "center",
+        width: "100%",
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        elevation: 2,
+        marginBottom: 24
+    },
+    breakCardLabel: {
+        color: "#64748B",
+        fontSize: 11,
+        fontWeight: "800",
+        letterSpacing: 1,
+        marginBottom: 8
+    },
+    breakTimerValue: {
+        color: "#7C3AED",
+        fontSize: 32,
+        fontWeight: "900",
+        letterSpacing: 1
+    },
+    breakCardNotice: {
+        color: "#94A3B8",
+        fontSize: 11,
+        textAlign: "center",
+        marginTop: 10
+    },
+    startPart2Btn: {
+        width: "100%",
+        borderRadius: 14,
+        overflow: "hidden"
+    },
+    structuredScroll: {
+        padding: 16,
+        paddingBottom: 40
+    },
+    structuredHeaderCard: {
+        backgroundColor: "#FFFFFF",
+        borderRadius: 20,
+        padding: 18,
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        elevation: 2,
+        marginBottom: 14
+    },
+    structuredBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#EEF2FF",
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 8,
+        alignSelf: "flex-start",
+        gap: 6,
+        marginBottom: 8
+    },
+    structuredBadgeText: {
+        color: "#4F46E5",
+        fontSize: 11,
+        fontWeight: "800"
+    },
+    structuredTitleText: {
+        fontSize: 20,
+        fontWeight: "900",
+        color: "#0F172A",
+        marginBottom: 4
+    },
+    structuredSubtitleText: {
+        fontSize: 12,
+        color: "#64748B",
+        lineHeight: 18,
+        marginBottom: 14
+    },
+    writingTimerBox: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#FFF7ED",
+        borderRadius: 14,
+        padding: 14,
+        borderWidth: 1,
+        borderColor: "#FED7AA"
+    },
+    writingTimerLabel: {
+        fontSize: 10,
+        fontWeight: "800",
+        color: "#C2410C",
+        letterSpacing: 0.5
+    },
+    writingTimerValue: {
+        fontSize: 20,
+        fontWeight: "900",
+        color: "#EA580C",
+        marginTop: 2
+    },
+    questionPaperBox: {
+        backgroundColor: "#FFFFFF",
+        borderRadius: 18,
+        padding: 18,
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        elevation: 2,
+        marginBottom: 14
+    },
+    docIconCircle: {
+        width: 48,
+        height: 48,
+        borderRadius: 12,
+        backgroundColor: "#FEE2E2",
+        justifyContent: "center",
+        alignItems: "center"
+    },
+    questionPaperTitle: {
+        fontSize: 15,
+        fontWeight: "800",
+        color: "#0F172A"
+    },
+    questionPaperSub: {
+        fontSize: 11,
+        color: "#64748B",
+        marginTop: 2
+    },
+    downloadPaperBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#DC2626",
+        borderRadius: 12,
+        paddingVertical: 12,
+        marginTop: 14,
+        gap: 8
+    },
+    downloadPaperBtnText: {
+        color: "#FFFFFF",
+        fontSize: 13,
+        fontWeight: "800"
+    },
+    guidelinesBox: {
+        backgroundColor: "#F8FAFC",
+        borderRadius: 16,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        marginBottom: 16
+    },
+    guidelinesHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginBottom: 10
+    },
+    guidelineItem: {
+        fontSize: 12,
+        color: "#475569",
+        lineHeight: 19,
+        marginBottom: 4
+    },
+    unlockUploadBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#4F46E5",
+        borderRadius: 14,
+        paddingVertical: 14,
+        gap: 8,
+        elevation: 2
+    },
+    unlockUploadBtnText: {
+        color: "#FFFFFF",
+        fontSize: 14,
+        fontWeight: "800"
+    },
+    pickButtonsRow: {
+        flexDirection: "row",
+        gap: 12,
+        marginBottom: 16
+    },
+    pickBtn: {
+        flex: 1,
+        backgroundColor: "#FFFFFF",
+        borderRadius: 16,
+        padding: 16,
+        alignItems: "center",
+        borderWidth: 1.5,
+        borderColor: "#E2E8F0",
+        elevation: 1
+    },
+    pickBtnText: {
+        fontSize: 13,
+        fontWeight: "800",
+        color: "#0F172A",
+        marginTop: 8
+    },
+    pickBtnSub: {
+        fontSize: 10,
+        fontWeight: "600",
+        color: "#64748B",
+        marginTop: 2
+    },
+    uploadedImagesSection: {
+        backgroundColor: "#FFFFFF",
+        borderRadius: 18,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        marginBottom: 16
+    },
+    uploadedCountText: {
+        fontSize: 11,
+        fontWeight: "700",
+        color: "#4F46E5"
+    },
+    emptyUploadBox: {
+        alignItems: "center",
+        paddingVertical: 24,
+        paddingHorizontal: 16
+    },
+    emptyUploadTitle: {
+        fontSize: 14,
+        fontWeight: "800",
+        color: "#64748B",
+        marginTop: 10
+    },
+    emptyUploadSub: {
+        fontSize: 11,
+        color: "#94A3B8",
+        textAlign: "center",
+        marginTop: 4
+    },
+    imageThumbnailsGrid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 10
+    },
+    thumbnailBox: {
+        width: (width - 76) / 3,
+        height: 120,
+        borderRadius: 12,
+        overflow: "hidden",
+        backgroundColor: "#F1F5F9",
+        borderWidth: 1,
+        borderColor: "#E2E8F0"
+    },
+    pageThumbImage: {
+        width: "100%",
+        height: "100%"
+    },
+    pageNumberBadge: {
+        position: "absolute",
+        bottom: 4,
+        left: 4,
+        backgroundColor: "rgba(15, 23, 42, 0.75)",
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 6
+    },
+    pageNumberBadgeText: {
+        color: "#FFFFFF",
+        fontSize: 9,
+        fontWeight: "800"
+    },
+    deleteThumbBtn: {
+        position: "absolute",
+        top: 4,
+        right: 4,
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: "#EF4444",
+        justifyContent: "center",
+        alignItems: "center"
+    },
+    finalSubmitBtn: {
+        borderRadius: 14,
+        overflow: "hidden",
+        elevation: 3
+    },
+    leaderboardCtaBtn: {
+        width: "100%",
+        borderRadius: 14,
+        overflow: "hidden",
+        marginTop: 16
+    },
+    leaderboardCtaGradient: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        gap: 8
+    },
+    leaderboardCtaText: {
+        color: "#FFFFFF",
+        fontSize: 13,
+        fontWeight: "800",
+        flex: 1,
+        textAlign: "center"
     }
 });
 

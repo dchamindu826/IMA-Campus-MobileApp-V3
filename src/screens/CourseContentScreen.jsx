@@ -20,10 +20,9 @@ import YouTubePlayer, { parseYouTube as parseYouTubeUrl } from '../components/Yo
 
 const KNOWN_TABS = [
     { key: 'recordings', title: 'Recordings', type: 'recording', icon: 'video-outline' },
-    { key: 'liveClasses', title: 'Live Classes', type: 'live', icon: 'broadcast' },
-    { key: 'documents', title: 'Documents', type: 'document', icon: 'file-document-outline' },
-    { key: 'papers', title: 'MCQ Papers', type: 'paper', icon: 'format-list-checks' },
-    { key: 'sPapers', title: 'Structured Papers', type: 'sPaper', icon: 'text-box-outline' }
+    { key: 'liveClasses', title: 'Live Class', type: 'live', icon: 'broadcast' },
+    { key: 'documents', title: 'PDF / Docs', type: 'document', icon: 'file-document-outline' },
+    { key: 'testRanking', title: 'Ranking Tests', type: 'paper', icon: 'trophy-outline' }
 ];
 
 // 🔥 SECURE INTERNAL PATH DEFINITION 🔥
@@ -75,8 +74,8 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
         );
     }
 
-    const isPaperType = type === 'paper';
-    const isDocumentType = ['document', 'sPaper'].includes(type);
+    const isPaperType = type === 'paper' || tabKey === 'testRanking';
+    const isDocumentType = ['document'].includes(type) && tabKey !== 'testRanking';
     const isLiveType = type === 'live' || tabKey === 'liveClasses';
 
     const handleOpenLive = async (item) => {
@@ -128,7 +127,7 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
     const targetTypeInt = getTypeInt(type);
 
     const allTypeFolders = (contentGroups || [])
-        .filter(f => parseInt(f.type) === targetTypeInt)
+        .filter(f => tabKey === 'testRanking' ? (parseInt(f.type) === 4 || parseInt(f.type) === 5) : parseInt(f.type) === targetTypeInt)
         .sort((a, b) => parseInt(a.itemOrder || 1) - parseInt(b.itemOrder || 1));
 
     // Root folders: folders that do not have parentId or whose parent is not in allTypeFolders
@@ -328,8 +327,10 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
                                 style={[styles.takeExamBtn, { flex: 1 }]}
                                 activeOpacity={0.8}
                             >
-                                <Icon name="format-list-checks" size={18} color="#ffffff" style={{ marginRight: 6 }} />
-                                <Text style={styles.takeExamBtnText}>Take MCQ Exam</Text>
+                                <Icon name="trophy-award" size={18} color="#ffffff" style={{ marginRight: 6 }} />
+                                <Text style={styles.takeExamBtnText}>
+                                    {item.paper?.paperType === 'STRUCTURED' ? 'Structured Paper' : (item.paper?.paperType === 'BOTH' ? 'Combined Paper' : 'Exam Paper')}
+                                </Text>
                             </TouchableOpacity>
                         ) : isLive ? (
                             <TouchableOpacity
@@ -640,12 +641,15 @@ const CourseContentScreen = ({ route, navigation }) => {
 
             <View style={{ flex: 1 }}>
                 {activeTab && (() => {
-                    const currentTabConfig = KNOWN_TABS.find(t => t.key === activeTab);
+                    const currentTabConfig = KNOWN_TABS.find(t => t.key === activeTab) || KNOWN_TABS[0];
+                    const tabData = activeTab === 'testRanking'
+                        ? (content?.rankingTests || [...(content?.sPapers || []), ...(content?.papers || [])])
+                        : (content?.[activeTab] || []);
                     return <SectionedContentList
                         tabKey={activeTab}
                         type={currentTabConfig.type}
-                        data={content[activeTab] || []}
-                        contentGroups={content.lessonGroups || content.contentGroups || []}
+                        data={tabData}
+                        contentGroups={content?.lessonGroups || content?.contentGroups || []}
                         onPlay={handlePlayVideo}
                         courseTitle={courseTitle}
                         onShowAlert={(config) => { setAlertConfig(config); setAlertVisible(true); }}

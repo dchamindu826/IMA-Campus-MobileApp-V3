@@ -32,6 +32,7 @@ const CourseDetailsScreen = ({ route, navigation }) => {
     const [groupPaidSubjects, setGroupPaidSubjects] = useState({});
     const [fullPaidSubjects, setFullPaidSubjects] = useState([]);
     const [batchInstallments, setBatchInstallments] = useState([]);
+    const [failedLogos, setFailedLogos] = useState({});
 
     const [loading, setLoading] = useState(false);
 
@@ -107,13 +108,11 @@ const CourseDetailsScreen = ({ route, navigation }) => {
             else courses = Array.isArray(selectedMonthGroup.courses) ? selectedMonthGroup.courses : Object.values(selectedMonthGroup.courses);
         } catch (e) { }
 
-        let targetTypes = [1];
-        if (selectedClassType === 'paper') targetTypes = [2];
-        else if (selectedClassType === 'both') targetTypes = [1, 2, 3];
+        const targetType = selectedClassType === 'paper' ? 2 : 1;
 
         courses = courses.filter(c => {
             const cType = parseInt(c.courseType || selectedMonthGroup?.classType || 1, 10);
-            return targetTypes.includes(cType);
+            return cType === targetType;
         });
 
         if (isSpecialFlow && activeStream !== 'All') {
@@ -307,12 +306,20 @@ const CourseDetailsScreen = ({ route, navigation }) => {
         }
     };
 
+    const isValidImageFileName = (filename) => {
+        if (!filename || typeof filename !== 'string') return false;
+        const clean = filename.trim().toLowerCase();
+        if (clean === '' || clean === 'null' || clean === 'undefined' || clean === 'default.png' || clean === 'none') return false;
+        if (clean.endsWith('.enc') || clean.endsWith('.htm') || clean.endsWith('.html') || clean.endsWith('.php')) return false;
+        return true;
+    };
+
     const getBatchLogoUri = (batch) => {
-        if (batch?.logo && batch.logo !== 'default.png') {
-            return `${IMAGE_URL}icons/${batch.logo}`;
+        if (isValidImageFileName(batch?.logo)) {
+            return `${IMAGE_URL}icons/${batch.logo.trim()}`;
         }
-        if (businessData?.logo && businessData.logo !== 'default.png') {
-            return `${IMAGE_URL}icons/${businessData.logo}`;
+        if (isValidImageFileName(businessData?.logo)) {
+            return `${IMAGE_URL}icons/${businessData.logo.trim()}`;
         }
         return null;
     };
@@ -479,10 +486,17 @@ const CourseDetailsScreen = ({ route, navigation }) => {
                             batches.map(batch => {
                                 const isSelected = selectedBatch?.id === batch.id;
                                 const batchLogoUri = getBatchLogoUri(batch);
+                                const isLogoBroken = failedLogos[batch.id];
+                                const showImage = batchLogoUri && !isLogoBroken;
                                 return (
                                     <TouchableOpacity activeOpacity={0.8} key={batch.id} style={[styles.modernCard, isSelected && styles.modernCardActive]} onPress={() => handleBatchSelect(batch)}>
-                                        {batchLogoUri ? (
-                                            <Image source={{ uri: batchLogoUri }} style={{ width: 70, height: 70, borderRadius: 12, backgroundColor: '#fff', marginRight: 15 }} resizeMode="cover" />
+                                        {showImage ? (
+                                            <Image 
+                                                source={{ uri: batchLogoUri }} 
+                                                style={{ width: 70, height: 70, borderRadius: 12, backgroundColor: '#fff', marginRight: 15 }} 
+                                                resizeMode="cover" 
+                                                onError={() => setFailedLogos(prev => ({ ...prev, [batch.id]: true }))}
+                                            />
                                         ) : (
                                             <View style={{ width: 70, height: 70, borderRadius: 12, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginRight: 15 }}>
                                                 <Icon name="school" size={30} color={COLORS.primary} />

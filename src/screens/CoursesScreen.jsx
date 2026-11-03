@@ -42,11 +42,19 @@ const CoursesScreen = ({ navigation }) => {
     }
   };
 
+  const isValidImage = (filename) => {
+    if (!filename || typeof filename !== 'string') return false;
+    const clean = filename.trim().toLowerCase();
+    if (clean === '' || clean === 'null' || clean === 'undefined' || clean === 'default.png' || clean === 'none') return false;
+    if (clean.endsWith('.enc') || clean.endsWith('.htm') || clean.endsWith('.html') || clean.endsWith('.php')) return false;
+    return true;
+  };
+
   // 🔥 FIX: පේළියට දෙකක් වැටෙන්න Card එක පොඩි කළා
   const renderItem = ({ item }) => {
-    const hasValidLogo = item.logo && item.logo !== 'default.png';
+    const hasValidLogo = isValidImage(item.logo);
     const logoUri = hasValidLogo
-      ? `${IMAGE_URL}icons/${item.logo}`
+      ? `${IMAGE_URL}icons/${item.logo.trim()}`
       : `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'IMA')}&background=DC2626&color=fff&size=200`;
 
     return (
