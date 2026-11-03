@@ -1579,8 +1579,10 @@ const MCQPaperScreen = ({ route, navigation }) => {
                                 end={{ x: 1, y: 0 }}
                                 style={styles.leaderboardCtaGradient}
                             >
-                                <Icon name="trophy" size={20} color="#FFFFFF" />
-                                <Text style={styles.leaderboardCtaText}>View Exam Leaderboard & Rankings</Text>
+                                <Icon name="trophy-award" size={20} color="#FFFFFF" />
+                                <Text style={styles.leaderboardCtaText} numberOfLines={1} ellipsizeMode="tail">
+                                    View Exam Leaderboard & Rankings
+                                </Text>
                                 <Icon name="chevron-right" size={20} color="#FFFFFF" />
                             </LinearGradient>
                         </TouchableOpacity>
@@ -2937,23 +2939,34 @@ const styles = StyleSheet.create({
     },
     leaderboardCtaBtn: {
         width: "100%",
+        alignSelf: "stretch",
         borderRadius: 14,
         overflow: "hidden",
-        marginTop: 16
+        marginTop: 18,
+        elevation: 3,
+        shadowColor: "#4F46E5",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.25,
+        shadowRadius: 6
     },
     leaderboardCtaGradient: {
+        width: "100%",
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
         paddingVertical: 14,
-        paddingHorizontal: 12
+        paddingHorizontal: 16,
+        borderRadius: 14,
+        minHeight: 48
     },
     leaderboardCtaText: {
         color: "#FFFFFF",
-        fontSize: 13,
+        fontSize: 13.5,
         fontWeight: "800",
         textAlign: "center",
-        marginHorizontal: 8
+        marginHorizontal: 8,
+        flexShrink: 1,
+        letterSpacing: 0.2
     }
 });
 

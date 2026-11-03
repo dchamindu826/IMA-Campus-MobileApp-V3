@@ -252,6 +252,7 @@ const StaffDashboardScreen = ({ navigation }) => {
                                         onPress={() => navigation.navigate('CrmContacts', {
                                             businessId: biz.id,
                                             businessName: biz.name,
+                                            batches: biz.batches || [],
                                             crmType: 'FREE_SEMINAR',
                                             isDarkMode
                                         })}
@@ -280,6 +281,7 @@ const StaffDashboardScreen = ({ navigation }) => {
                                         onPress={() => navigation.navigate('CrmContacts', {
                                             businessId: biz.id,
                                             businessName: biz.name,
+                                            batches: biz.batches || [],
                                             crmType: 'AFTER_SEMINAR',
                                             isDarkMode
                                         })}

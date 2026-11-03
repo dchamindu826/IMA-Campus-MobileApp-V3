@@ -16,6 +16,8 @@ const GlobalCallPopup = () => {
         toggleMute,
         isOnHold,
         toggleHold,
+        isSpeakerOn,
+        toggleSpeaker,
         isCallMinimized,
         toggleMinimize
     } = useCall();
@@ -117,6 +119,15 @@ const GlobalCallPopup = () => {
                                 hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                             >
                                 <Icon name={activeCall.isMuted ? "microphone-off" : "microphone"} size={16} color={activeCall.isMuted ? "#EF4444" : "#E2E8F0"} />
+                            </TouchableOpacity>
+
+                            {/* Speaker */}
+                            <TouchableOpacity
+                                style={[styles.miniBtn, isSpeakerOn && styles.miniBtnSpeakerActive]}
+                                onPress={toggleSpeaker}
+                                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                            >
+                                <Icon name={isSpeakerOn ? "volume-high" : "volume-medium"} size={16} color={isSpeakerOn ? "#10B981" : "#E2E8F0"} />
                             </TouchableOpacity>
 
                             {/* End Call */}
@@ -235,6 +246,19 @@ const GlobalCallPopup = () => {
                                             <Icon name={activeCall.isMuted ? "microphone-off" : "microphone"} size={26} color="white" />
                                         </TouchableOpacity>
                                         <Text style={styles.actionText}>{activeCall.isMuted ? "Unmute" : "Mute"}</Text>
+                                    </View>
+
+                                    {/* Speaker Button */}
+                                    <View style={styles.actionBtnWrapper}>
+                                        <TouchableOpacity
+                                            style={[styles.actionButton, isSpeakerOn ? styles.speakerActiveButton : styles.activeButton]}
+                                            onPress={toggleSpeaker}
+                                        >
+                                            <Icon name={isSpeakerOn ? "volume-high" : "volume-medium"} size={26} color="white" />
+                                        </TouchableOpacity>
+                                        <Text style={[styles.actionText, isSpeakerOn && styles.actionTextSpeaker]}>
+                                            {isSpeakerOn ? "Speaker" : "Speaker"}
+                                        </Text>
                                     </View>
 
                                     {/* Hold Call Button (Plays music for caller) */}
@@ -577,6 +601,16 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         borderColor: '#FDE68A'
     },
+    speakerActiveButton: {
+        backgroundColor: '#00a884',
+        borderWidth: 2,
+        borderColor: '#25D366'
+    },
+    miniBtnSpeakerActive: {
+        backgroundColor: 'rgba(0, 168, 132, 0.35)',
+        borderColor: '#25D366',
+        borderWidth: 1
+    },
     actionText: {
         color: '#e9edef',
         fontSize: 11,
@@ -586,6 +620,9 @@ const styles = StyleSheet.create({
     },
     actionTextHold: {
         color: '#F59E0B'
+    },
+    actionTextSpeaker: {
+        color: '#25D366'
     }
 });
 

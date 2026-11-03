@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext, useCallback, useMemo } from 'react';
 import {
     View, Text, StyleSheet, FlatList, TouchableOpacity,
-    TextInput, ActivityIndicator, RefreshControl, StatusBar, Platform, ScrollView
+    TextInput, ActivityIndicator, RefreshControl, StatusBar, Platform, ScrollView, Modal
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -45,6 +45,7 @@ export default function CrmContactsScreen({ route, navigation }) {
     const {
         businessId,
         businessName = 'Business',
+        batches: passedBatches = [],
         crmType = 'FREE_SEMINAR',
         isDarkMode: initialDark = true
     } = route.params || {};
@@ -60,49 +61,71 @@ export default function CrmContactsScreen({ route, navigation }) {
     const [searchQuery, setSearchQuery] = useState('');
     const [showSearch, setShowSearch] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState('ALL');
+    const [availableBatches, setAvailableBatches] = useState(passedBatches || []);
+    const [selectedBatch, setSelectedBatch] = useState(null); // null = All Batches
+    const [showBatchModal, setShowBatchModal] = useState(false);
 
-    // Categorized statistics and unique categories (Batches, Unread, Statuses)
-    const categories = useMemo(() => {
-        const batchMap = new Map();
-        let unreadTotal = 0;
+    // Auto-fetch batches for this business if not passed in navigation
+    useEffect(() => {
+        if ((!availableBatches || availableBatches.length === 0) && businessId) {
+            api.get('/admin/businesses')
+                .then(res => {
+                    const list = res.data || [];
+                    const biz = list.find(b => String(b.id || b._id) === String(businessId));
+                    if (biz && Array.isArray(biz.batches) && biz.batches.length > 0) {
+                        setAvailableBatches(biz.batches);
+                    }
+                })
+                .catch(() => {});
+        }
+    }, [businessId]);
 
-        leads.forEach(l => {
-            if ((l.unreadCount || 0) > 0) unreadTotal++;
-            const bName = l.batch?.name || l.batchName;
+    // Unique list of all batches (from business structure + leads in memory)
+    const allBatches = useMemo(() => {
+        const map = new Map();
+        (availableBatches || []).forEach(b => {
+            const bName = b.name || b.title;
             if (bName) {
-                batchMap.set(bName, (batchMap.get(bName) || 0) + 1);
+                map.set(String(bName).toLowerCase(), { id: b.id || b._id || bName, name: bName });
             }
         });
-
-        const list = [
-            { id: 'ALL', label: 'All', count: leads.length, icon: 'account-group' },
-            { id: 'UNREAD', label: 'Unread', count: unreadTotal, icon: 'message-badge', isAlert: unreadTotal > 0 }
-        ];
-
-        batchMap.forEach((cnt, name) => {
-            list.push({
-                id: `BATCH_${name}`,
-                label: name,
-                count: cnt,
-                icon: 'school',
-                isBatch: true,
-                batchName: name
-            });
+        leads.forEach(l => {
+            const bName = l.batch?.name || l.batchName;
+            if (bName && !map.has(String(bName).toLowerCase())) {
+                map.set(String(bName).toLowerCase(), { id: l.batch?.id || bName, name: bName });
+            }
         });
+        return Array.from(map.values());
+    }, [availableBatches, leads]);
 
-        return list;
+    const getBatchCount = (batchName) => {
+        if (!batchName) return leads.length;
+        return leads.filter(l => {
+            const bName = l.batch?.name || l.batchName;
+            return bName && bName.toLowerCase() === batchName.toLowerCase();
+        }).length;
+    };
+
+    const unreadCount = useMemo(() => {
+        return leads.filter(l => (l.unreadCount || 0) > 0).length;
     }, [leads]);
 
-    // Filter leads by selectedCategory
+    // Filter leads by selectedCategory AND selectedBatch
     const filteredLeads = useMemo(() => {
-        if (selectedCategory === 'ALL') return leads;
-        if (selectedCategory === 'UNREAD') return leads.filter(l => (l.unreadCount || 0) > 0);
-        if (selectedCategory.startsWith('BATCH_')) {
-            const bName = selectedCategory.replace('BATCH_', '');
-            return leads.filter(l => (l.batch?.name === bName || l.batchName === bName));
+        let result = leads;
+        if (selectedBatch) {
+            result = result.filter(l => {
+                const bName = l.batch?.name || l.batchName;
+                const bId = l.batch?.id || l.batchId;
+                return (bName && bName.toLowerCase() === selectedBatch.name.toLowerCase()) ||
+                       (bId && String(bId) === String(selectedBatch.id));
+            });
         }
-        return leads;
-    }, [leads, selectedCategory]);
+        if (selectedCategory === 'UNREAD') {
+            result = result.filter(l => (l.unreadCount || 0) > 0);
+        }
+        return result;
+    }, [leads, selectedBatch, selectedCategory]);
 
     // Authentic WhatsApp Light / Dark Mode Theme
     const theme = useMemo(() => isDarkMode ? {
@@ -437,74 +460,207 @@ export default function CrmContactsScreen({ route, navigation }) {
                 </View>
             </View>
 
-            {/* Horizontal Category Filter Pills */}
-            <View style={[styles.categoryBarWrap, { backgroundColor: isDarkMode ? '#111b21' : '#FFFFFF', borderBottomColor: theme.border }]}>
-                <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.categoryScroll}
+            {/* Batch Dropdown & Quick Unread Filter Bar */}
+            <View style={[styles.filterBar, { backgroundColor: isDarkMode ? '#111b21' : '#FFFFFF', borderBottomColor: theme.border }]}>
+                {/* Batch Dropdown Trigger Button */}
+                <TouchableOpacity
+                    style={[
+                        styles.batchDropdownBtn,
+                        selectedBatch
+                            ? { backgroundColor: isDarkMode ? '#0A332C' : '#E7FCE3', borderColor: isDarkMode ? '#00a884' : '#25D366' }
+                            : { backgroundColor: isDarkMode ? '#1f2c34' : '#F0F2F5', borderColor: theme.border }
+                    ]}
+                    activeOpacity={0.8}
+                    onPress={() => setShowBatchModal(true)}
                 >
-                    {categories.map((cat) => {
-                        const isSel = selectedCategory === cat.id;
-                        return (
-                            <TouchableOpacity
-                                key={cat.id}
-                                style={[
-                                    styles.categoryChip,
-                                    isSel 
-                                        ? { 
-                                            backgroundColor: isDarkMode ? '#0A332C' : '#E7FCE3',
-                                            borderColor: isDarkMode ? '#00a884' : '#25D366',
-                                            borderWidth: 1
-                                          } 
-                                        : { 
-                                            backgroundColor: isDarkMode ? '#202C33' : '#F0F2F5', 
-                                            borderColor: isDarkMode ? 'rgba(255,255,255,0.06)' : '#E9EDEF', 
-                                            borderWidth: 1 
-                                          }
-                                ]}
-                                onPress={() => setSelectedCategory(cat.id)}
-                                activeOpacity={0.8}
-                            >
-                                <Icon 
-                                    name={cat.icon || "tag-outline"} 
-                                    size={14} 
-                                    color={isSel ? (isDarkMode ? '#00a884' : '#008069') : (isDarkMode ? '#8696a0' : '#54656F')} 
-                                    style={{ marginRight: 5 }}
-                                />
-                                <Text style={[
-                                    styles.categoryChipText,
-                                    { 
-                                        color: isSel ? (isDarkMode ? '#00a884' : '#008069') : theme.textPrimary, 
-                                        fontWeight: isSel ? '700' : '500' 
-                                    }
-                                ]}>
-                                    {cat.label}
-                                </Text>
-                                <View style={[
-                                    styles.categoryCountBadge,
-                                    { 
-                                        backgroundColor: isSel 
-                                            ? (isDarkMode ? 'rgba(0,168,132,0.2)' : 'rgba(0,128,105,0.15)') 
-                                            : (cat.isAlert ? '#25D366' : (isDarkMode ? 'rgba(255,255,255,0.08)' : '#E9EDEF')) 
-                                    }
-                                ]}>
-                                    <Text style={[
-                                        styles.categoryCountText,
-                                        { 
-                                            color: isSel 
-                                                ? (isDarkMode ? '#00a884' : '#008069') 
-                                                : (cat.isAlert ? '#FFFFFF' : theme.textSecondary) 
-                                        }
-                                    ]}>
-                                        {cat.count}
-                                    </Text>
-                                </View>
-                            </TouchableOpacity>
-                        );
-                    })}
-                </ScrollView>
+                    <Icon
+                        name="school-outline"
+                        size={16}
+                        color={selectedBatch ? (isDarkMode ? '#00a884' : '#008069') : theme.textSecondary}
+                        style={{ marginRight: 6 }}
+                    />
+                    <Text
+                        style={[
+                            styles.batchDropdownText,
+                            {
+                                color: selectedBatch ? (isDarkMode ? '#00a884' : '#008069') : theme.textPrimary,
+                                fontWeight: selectedBatch ? '700' : '500'
+                            }
+                        ]}
+                        numberOfLines={1}
+                    >
+                        {selectedBatch ? `${selectedBatch.name} (${getBatchCount(selectedBatch.name)})` : 'All Batches'}
+                    </Text>
+                    {selectedBatch ? (
+                        <TouchableOpacity
+                            onPress={() => setSelectedBatch(null)}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            style={{ marginLeft: 6 }}
+                        >
+                            <Icon name="close-circle" size={16} color={isDarkMode ? '#00a884' : '#008069'} />
+                        </TouchableOpacity>
+                    ) : (
+                        <Icon name="chevron-down" size={18} color={theme.textSecondary} style={{ marginLeft: 4 }} />
+                    )}
+                </TouchableOpacity>
+
+                {/* Quick Unread Toggle Filter */}
+                <TouchableOpacity
+                    style={[
+                        styles.unreadFilterPill,
+                        selectedCategory === 'UNREAD'
+                            ? { backgroundColor: '#25D366', borderColor: '#25D366' }
+                            : { backgroundColor: isDarkMode ? '#1f2c34' : '#F0F2F5', borderColor: theme.border }
+                    ]}
+                    onPress={() => setSelectedCategory(prev => prev === 'UNREAD' ? 'ALL' : 'UNREAD')}
+                    activeOpacity={0.8}
+                >
+                    <Icon
+                        name="message-badge"
+                        size={14}
+                        color={selectedCategory === 'UNREAD' ? '#FFFFFF' : theme.textSecondary}
+                        style={{ marginRight: 4 }}
+                    />
+                    <Text
+                        style={[
+                            styles.unreadFilterText,
+                            { color: selectedCategory === 'UNREAD' ? '#FFFFFF' : theme.textPrimary, fontWeight: selectedCategory === 'UNREAD' ? '700' : '500' }
+                        ]}
+                    >
+                        Unread
+                    </Text>
+                    {unreadCount > 0 && (
+                        <View style={[styles.unreadFilterBadge, { backgroundColor: selectedCategory === 'UNREAD' ? 'rgba(0,0,0,0.2)' : '#25D366' }]}>
+                            <Text style={styles.unreadFilterBadgeText}>
+                                {unreadCount}
+                            </Text>
+                        </View>
+                    )}
+                </TouchableOpacity>
             </View>
+
+            {/* Batch Filter Selection Modal */}
+            <Modal
+                visible={showBatchModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowBatchModal(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalBackdrop}
+                    activeOpacity={1}
+                    onPress={() => setShowBatchModal(false)}
+                >
+                    <View
+                        style={[styles.modalSheet, { backgroundColor: isDarkMode ? '#1f2c34' : '#FFFFFF' }]}
+                        onStartShouldSetResponder={() => true}
+                    >
+                        {/* Modal Header */}
+                        <View style={styles.modalHeader}>
+                            <View style={styles.modalIndicator} />
+                            <View style={styles.modalTitleRow}>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Select Batch</Text>
+                                    <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>{businessName}</Text>
+                                </View>
+                                <TouchableOpacity onPress={() => setShowBatchModal(false)} style={styles.modalCloseBtn}>
+                                    <Icon name="close" size={22} color={theme.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        {/* Batch Options */}
+                        <ScrollView style={styles.modalScroll} contentContainerStyle={{ paddingBottom: 24 }}>
+                            {/* Option 1: All Batches */}
+                            <TouchableOpacity
+                                style={[
+                                    styles.batchOptionItem,
+                                    !selectedBatch && { backgroundColor: isDarkMode ? 'rgba(0,168,132,0.15)' : '#E7FCE3' }
+                                ]}
+                                onPress={() => {
+                                    setSelectedBatch(null);
+                                    setShowBatchModal(false);
+                                }}
+                            >
+                                <View style={styles.batchOptionLeft}>
+                                    <Icon
+                                        name="account-group"
+                                        size={20}
+                                        color={!selectedBatch ? (isDarkMode ? '#00a884' : '#008069') : theme.textSecondary}
+                                        style={{ marginRight: 12 }}
+                                    />
+                                    <View>
+                                        <Text
+                                            style={[
+                                                styles.batchOptionName,
+                                                { color: !selectedBatch ? (isDarkMode ? '#00a884' : '#008069') : theme.textPrimary, fontWeight: !selectedBatch ? '700' : '500' }
+                                            ]}
+                                        >
+                                            All Batches
+                                        </Text>
+                                        <Text style={[styles.batchOptionCount, { color: theme.textSecondary }]}>
+                                            {leads.length} total leads
+                                        </Text>
+                                    </View>
+                                </View>
+                                {!selectedBatch && (
+                                    <Icon name="check-circle" size={20} color={isDarkMode ? '#00a884' : '#008069'} />
+                                )}
+                            </TouchableOpacity>
+
+                            {/* Option 2..N: Batches */}
+                            {allBatches.length > 0 ? (
+                                allBatches.map(b => {
+                                    const isSelected = selectedBatch?.id === b.id || selectedBatch?.name === b.name;
+                                    const count = getBatchCount(b.name);
+                                    return (
+                                        <TouchableOpacity
+                                            key={String(b.id || b.name)}
+                                            style={[
+                                                styles.batchOptionItem,
+                                                isSelected && { backgroundColor: isDarkMode ? 'rgba(0,168,132,0.15)' : '#E7FCE3' }
+                                            ]}
+                                            onPress={() => {
+                                                setSelectedBatch(b);
+                                                setShowBatchModal(false);
+                                            }}
+                                        >
+                                            <View style={styles.batchOptionLeft}>
+                                                <Icon
+                                                    name="school"
+                                                    size={20}
+                                                    color={isSelected ? (isDarkMode ? '#00a884' : '#008069') : theme.textSecondary}
+                                                    style={{ marginRight: 12 }}
+                                                />
+                                                <View>
+                                                    <Text
+                                                        style={[
+                                                            styles.batchOptionName,
+                                                            { color: isSelected ? (isDarkMode ? '#00a884' : '#008069') : theme.textPrimary, fontWeight: isSelected ? '700' : '500' }
+                                                        ]}
+                                                    >
+                                                        {b.name}
+                                                    </Text>
+                                                    <Text style={[styles.batchOptionCount, { color: theme.textSecondary }]}>
+                                                        {count} {count === 1 ? 'lead' : 'leads'}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                            {isSelected && (
+                                                <Icon name="check-circle" size={20} color={isDarkMode ? '#00a884' : '#008069'} />
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })
+                            ) : (
+                                <View style={{ padding: 24, alignItems: 'center' }}>
+                                    <Text style={{ color: theme.textSecondary, fontSize: 14 }}>No batches found for this business.</Text>
+                                </View>
+                            )}
+                        </ScrollView>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
 
             {/* Leads List */}
             {loading && !refreshing ? (
@@ -773,5 +929,125 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginTop: 6,
         lineHeight: 18
+    },
+    // Batch Filter Bar
+    filterBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+        gap: 8
+    },
+    batchDropdownBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1
+    },
+    batchDropdownText: {
+        fontSize: 13,
+        flex: 1
+    },
+    unreadFilterPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1
+    },
+    unreadFilterText: {
+        fontSize: 12
+    },
+    unreadFilterBadge: {
+        marginLeft: 6,
+        borderRadius: 10,
+        paddingHorizontal: 5,
+        paddingVertical: 1,
+        minWidth: 18,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    unreadFilterBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: 'bold'
+    },
+    // Modal Styles
+    modalBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        justifyContent: 'flex-end'
+    },
+    modalSheet: {
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        maxHeight: '65%',
+        paddingTop: 10,
+        elevation: 20,
+        shadowColor: '#000',
+        shadowOpacity: 0.35,
+        shadowRadius: 10
+    },
+    modalHeader: {
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: 'rgba(128,128,128,0.2)'
+    },
+    modalIndicator: {
+        width: 36,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: 'rgba(128,128,128,0.4)',
+        alignSelf: 'center',
+        marginBottom: 10
+    },
+    modalTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+    },
+    modalTitle: {
+        fontSize: 17,
+        fontWeight: 'bold'
+    },
+    modalSubtitle: {
+        fontSize: 12,
+        marginTop: 2
+    },
+    modalCloseBtn: {
+        padding: 4
+    },
+    modalScroll: {
+        paddingHorizontal: 12,
+        paddingTop: 8
+    },
+    batchOptionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderRadius: 12,
+        marginVertical: 3
+    },
+    batchOptionLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1
+    },
+    batchOptionName: {
+        fontSize: 14
+    },
+    batchOptionCount: {
+        fontSize: 11,
+        marginTop: 2
     }
 });

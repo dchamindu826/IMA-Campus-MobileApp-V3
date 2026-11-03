@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { DeviceEventEmitter, Platform } from 'react-native';
+import { DeviceEventEmitter, Platform, NativeModules } from 'react-native';
 import { io } from 'socket.io-client';
 import api from '../services/api';
 import { RTCPeerConnection, RTCSessionDescription, mediaDevices } from 'react-native-webrtc';
@@ -48,13 +48,19 @@ export const saveCallLog = async (logEntry) => {
         const phone = logEntry?.phone || logEntry?.from;
         const cleanPhone = String(phone || '').replace(/[^0-9]/g, '');
         if (!cleanPhone) return;
-        const key = `@wa_call_history_${cleanPhone}`;
+
+        // Scope by businessId / businessType so each business has isolated call history
+        const bizKey = String(logEntry?.businessId || logEntry?.businessType || 'general').trim().toLowerCase();
+        const key = `@wa_call_history_${bizKey}_${cleanPhone}`;
+
         const existing = await AsyncStorage.getItem(key);
         const list = existing ? JSON.parse(existing) : [];
         const fullEntry = {
             id: 'call_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
             type: 'CALL_EVENT',
             phone: cleanPhone,
+            businessId: logEntry.businessId,
+            businessType: logEntry.businessType,
             leadName: logEntry.leadName || 'Student',
             direction: logEntry.direction || (logEntry.isOutbound ? 'OUTBOUND' : 'INBOUND'),
             status: logEntry.status || 'COMPLETED',
@@ -76,10 +82,11 @@ export const CallProvider = ({ children }) => {
     
     // Call States
     const [incomingCall, setIncomingCall] = useState(null);
-    const [activeCall, setActiveCall] = useState(null); // { callId, from, leadName, businessType, status, isOutbound, isMuted, peerConnection, localStream, startTime }
+    const [activeCall, setActiveCall] = useState(null); // { callId, from, leadName, businessId, businessType, status, isOutbound, isMuted, peerConnection, localStream, startTime }
     const [isRinging, setIsRinging] = useState(false);
     const [agentStatus, setAgentStatus] = useState('OFFLINE');
     const [isOnHold, setIsOnHold] = useState(false);
+    const [isSpeakerOn, setIsSpeakerOn] = useState(false);
     const [isCallMinimized, setIsCallMinimized] = useState(false);
 
     const pcRef = useRef(null);
@@ -162,7 +169,14 @@ export const CallProvider = ({ children }) => {
             } catch (e) {}
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribe();
+            try {
+                if (VoipPushNotification && typeof VoipPushNotification.removeEventListener === 'function') {
+                    VoipPushNotification.removeEventListener('register');
+                }
+            } catch (e) {}
+        };
     }, [userToken, userInfo]);
 
     // Setup CallKit (iOS) and ConnectionService (Android) via RNCallKeep
@@ -175,7 +189,10 @@ export const CallProvider = ({ children }) => {
                         imageName: 'ic_launcher',
                         supportsVideo: false,
                         maximumCallGroups: '1',
-                        maximumCallsPerCallGroup: '1'
+                        maximumCallsPerCallGroup: '1',
+                        audioSession: {
+                            mode: 'VoiceChat'
+                        }
                     },
                     android: {
                         alertTitle: 'Permissions required',
@@ -201,12 +218,23 @@ export const CallProvider = ({ children }) => {
             try {
                 RNCallKeep.setCurrentCallActive(callKitUuid);
             } catch (e) {}
+            if (activeCallRef.current && activeCallRef.current.callId === realCallId) {
+                return;
+            }
             const currentIncoming = incomingCallRef.current;
             answerCall(realCallId, currentIncoming?.sdp || currentIncoming?.offerSdp);
         };
 
         const onEnd = ({ callUUID }) => {
             console.log('Mobile: CallKeep native endCall event for callUUID:', callUUID);
+            if (callUUID) {
+                const realCallId = getRealCallId(callUUID);
+                const curr = activeCallRef.current || incomingCallRef.current;
+                if (curr && curr.callId && realCallId && String(curr.callId) !== String(realCallId)) {
+                    console.log(`Mobile: Ignoring CallKeep endCall for non-matching callUUID: ${callUUID} (Current: ${curr.callId})`);
+                    return;
+                }
+            }
             endCall();
         };
 
@@ -240,16 +268,62 @@ export const CallProvider = ({ children }) => {
             }
         };
 
-        RNCallKeep.addEventListener('answerCall', onAnswer);
-        RNCallKeep.addEventListener('endCall', onEnd);
-        RNCallKeep.addEventListener('didPerformSetMutedCallAction', onMute);
-        RNCallKeep.addEventListener('didToggleHoldAction', onHold);
+        const onActivateAudioSession = () => {
+            console.log('Mobile: CallKeep native didActivateAudioSession event');
+            try {
+                if (NativeModules.WebRTCModule && typeof NativeModules.WebRTCModule.audioSessionDidActivate === 'function') {
+                    NativeModules.WebRTCModule.audioSessionDidActivate();
+                }
+            } catch (e) {}
+        };
+
+        const onDeactivateAudioSession = () => {
+            console.log('Mobile: CallKeep native didDeactivateAudioSession event');
+            try {
+                if (NativeModules.WebRTCModule && typeof NativeModules.WebRTCModule.audioSessionDidDeactivate === 'function') {
+                    NativeModules.WebRTCModule.audioSessionDidDeactivate();
+                }
+            } catch (e) {}
+        };
+
+        const subAnswer = RNCallKeep.addEventListener('answerCall', onAnswer);
+        const subEnd = RNCallKeep.addEventListener('endCall', onEnd);
+        const subMute = RNCallKeep.addEventListener('didPerformSetMutedCallAction', onMute);
+        const subHold = RNCallKeep.addEventListener('didToggleHoldCallAction', onHold);
+        const subActivate = RNCallKeep.addEventListener('didActivateAudioSession', onActivateAudioSession);
+        const subDeactivate = RNCallKeep.addEventListener('didDeactivateAudioSession', onDeactivateAudioSession);
 
         return () => {
-            RNCallKeep.removeEventListener('answerCall', onAnswer);
-            RNCallKeep.removeEventListener('endCall', onEnd);
-            RNCallKeep.removeEventListener('didPerformSetMutedCallAction', onMute);
-            RNCallKeep.removeEventListener('didToggleHoldAction', onHold);
+            if (subAnswer && typeof subAnswer.remove === 'function') {
+                try { subAnswer.remove(); } catch (e) {}
+            } else {
+                try { RNCallKeep.removeEventListener('answerCall'); } catch (e) {}
+            }
+            if (subEnd && typeof subEnd.remove === 'function') {
+                try { subEnd.remove(); } catch (e) {}
+            } else {
+                try { RNCallKeep.removeEventListener('endCall'); } catch (e) {}
+            }
+            if (subMute && typeof subMute.remove === 'function') {
+                try { subMute.remove(); } catch (e) {}
+            } else {
+                try { RNCallKeep.removeEventListener('didPerformSetMutedCallAction'); } catch (e) {}
+            }
+            if (subHold && typeof subHold.remove === 'function') {
+                try { subHold.remove(); } catch (e) {}
+            } else {
+                try { RNCallKeep.removeEventListener('didToggleHoldCallAction'); } catch (e) {}
+            }
+            if (subActivate && typeof subActivate.remove === 'function') {
+                try { subActivate.remove(); } catch (e) {}
+            } else {
+                try { RNCallKeep.removeEventListener('didActivateAudioSession'); } catch (e) {}
+            }
+            if (subDeactivate && typeof subDeactivate.remove === 'function') {
+                try { subDeactivate.remove(); } catch (e) {}
+            } else {
+                try { RNCallKeep.removeEventListener('didDeactivateAudioSession'); } catch (e) {}
+            }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -361,11 +435,42 @@ export const CallProvider = ({ children }) => {
 
         const handleCallDisconnected = (data) => {
             console.log("Mobile: Call disconnected socket event received:", data);
+            const currActive = activeCallRef.current;
             const currentIncoming = incomingCallRef.current || incomingCall;
+
+            if (!currActive && !currentIncoming) {
+                return;
+            }
+
+            const currentCallId = currActive?.callId || currentIncoming?.callId;
+            const currentPhone = currActive?.from || currentIncoming?.from;
+
+            // Only terminate if the event matches this active/incoming call
+            if (data?.callId && currentCallId && String(data.callId) !== String(currentCallId)) {
+                console.log(`Mobile: Disconnect event callId ${data.callId} does not match current ${currentCallId}, ignoring.`);
+                return;
+            }
+            if (data?.phone && currentPhone) {
+                const p1 = String(data.phone).replace(/[^0-9]/g, '');
+                const p2 = String(currentPhone).replace(/[^0-9]/g, '');
+                if (p1 && p2 && !p1.endsWith(p2) && !p2.endsWith(p1)) {
+                    console.log(`Mobile: Disconnect event phone ${data.phone} does not match current ${currentPhone}, ignoring.`);
+                    return;
+                }
+            }
+
+            // If an active call is already CONNECTED and audio is flowing, do NOT end on ambiguous event without identifier
+            if (currActive && currActive.status === 'CONNECTED' && !data?.callId && !data?.phone) {
+                console.log("Mobile: Ignoring ambiguous disconnect event without callId or phone for active connected call.");
+                return;
+            }
+
             if (currentIncoming) {
                 saveCallLog({
                     phone: currentIncoming.from,
                     leadName: currentIncoming.leadName,
+                    businessId: currentIncoming.businessId,
+                    businessType: currentIncoming.businessType,
                     isOutbound: false,
                     status: 'MISSED',
                     duration: 0,
@@ -380,6 +485,21 @@ export const CallProvider = ({ children }) => {
         const handleOutboundStatus = (data) => {
             console.log("Mobile: WhatsApp Call Status Event:", data);
             if (!data?.status) return;
+            const currActive = activeCallRef.current;
+            if (!currActive || !currActive.isOutbound) return;
+
+            if (data?.callId && currActive?.callId && String(data.callId) !== String(currActive.callId)) {
+                return;
+            }
+            if (data?.phone && currActive?.from) {
+                const p1 = String(data.phone).replace(/[^0-9]/g, '');
+                const p2 = String(currActive.from).replace(/[^0-9]/g, '');
+                if (p1 && p2 && !p1.endsWith(p2) && !p2.endsWith(p1)) return;
+            }
+            if (!data?.callId && !data?.phone && currActive.status === 'CONNECTED') {
+                return;
+            }
+
             const status = String(data.status).toUpperCase();
 
             if (status === 'RINGING') {
@@ -396,10 +516,14 @@ export const CallProvider = ({ children }) => {
 
         const handleOutboundAnswer = async (data) => {
             console.log("Mobile: Outbound Answer received from Meta:", data?.callId);
+            if (outboundRingingTimeoutRef.current) {
+                clearTimeout(outboundRingingTimeoutRef.current);
+                outboundRingingTimeoutRef.current = null;
+            }
             if (pcRef.current && pcRef.current.signalingState !== 'closed' && data?.sdp) {
                 try {
                     await pcRef.current.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: data.sdp }));
-                    setActiveCall(prev => prev ? { ...prev, status: prev.status === 'CONNECTED' ? 'CONNECTED' : 'RINGING' } : null);
+                    setActiveCall(prev => prev ? { ...prev, callId: data?.callId || prev.callId, status: 'CONNECTED' } : null);
                 } catch (e) {
                     console.error("Mobile: SDP Answer error:", e);
                 }
@@ -484,14 +608,32 @@ export const CallProvider = ({ children }) => {
             return;
         }
 
-        // Stop ringtone audio immediately, but DO NOT clear incomingCall to null yet!
+        // Avoid re-answering if already connecting/connected
+        if (activeCallRef.current && activeCallRef.current.callId === targetCallId && ['CONNECTING', 'CONNECTED'].includes(activeCallRef.current.status)) {
+            console.log('Mobile: Call is already active/connecting, skipping duplicate answerCall');
+            return;
+        }
+
+        // Stop ringtone audio immediately
         setIsRinging(false);
+
+        // Tell CallKit immediately so top banner stops ringing and answers
+        try {
+            const callKitUuid = registerCallKitMapping(targetCallId);
+            if (Platform.OS === 'ios') {
+                RNCallKeep.answerIncomingCall(callKitUuid);
+            }
+            RNCallKeep.setCurrentCallActive(callKitUuid);
+        } catch (e) {
+            console.log('Mobile: CallKit answer sync error:', e);
+        }
 
         // Immediately transition UI into active CONNECTING state so popup modal NEVER disappears
         setActiveCall({
             callId: targetCallId,
             from: currentIncoming?.from || '',
             leadName: currentIncoming?.leadName || 'Student',
+            businessId: currentIncoming?.businessId,
             businessType: currentIncoming?.businessType || 'IMA Campus',
             receivingWaNumId: currentIncoming?.receivingWaNumId,
             startTime: new Date(),
@@ -512,25 +654,36 @@ export const CallProvider = ({ children }) => {
 
             pc.ontrack = (event) => {
                 console.log('Mobile: Remote track received from WhatsApp incoming call.');
-                if (event.track) {
-                    event.track.onended = () => {
-                        console.log('Mobile: Remote audio track ended (incoming call), ending call.');
-                        endCall();
-                    };
-                }
             };
 
+            let disconnectTimer = null;
             pc.onconnectionstatechange = () => {
                 console.log('Mobile: Inbound WebRTC connectionState:', pc.connectionState);
-                if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-                    console.log('Mobile: Remote peer disconnected WebRTC, ending call.');
+                if (pc.connectionState === 'connected') {
+                    if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
+                } else if (['failed', 'closed'].includes(pc.connectionState)) {
+                    console.log('Mobile: Remote peer failed/closed WebRTC, ending call.');
+                    if (disconnectTimer) clearTimeout(disconnectTimer);
                     endCall();
+                } else if (pc.connectionState === 'disconnected') {
+                    console.log('Mobile: Inbound WebRTC temporarily disconnected, waiting 6s for reconnect...');
+                    if (!disconnectTimer) {
+                        disconnectTimer = setTimeout(() => {
+                            if (pcRef.current && pcRef.current.connectionState === 'disconnected') {
+                                console.log('Mobile: Inbound WebRTC disconnected for >6s, ending call.');
+                                endCall();
+                            }
+                        }, 6000);
+                    }
                 }
             };
             pc.oniceconnectionstatechange = () => {
                 console.log('Mobile: Inbound WebRTC iceConnectionState:', pc.iceConnectionState);
-                if (['disconnected', 'failed', 'closed'].includes(pc.iceConnectionState)) {
-                    console.log('Mobile: ICE disconnected/failed, ending call.');
+                if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+                    if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
+                } else if (pc.iceConnectionState === 'failed') {
+                    console.log('Mobile: ICE failed, ending call.');
+                    if (disconnectTimer) clearTimeout(disconnectTimer);
                     endCall();
                 }
             };
@@ -622,34 +775,70 @@ export const CallProvider = ({ children }) => {
 
             pc.ontrack = (event) => {
                 console.log("Mobile: Remote track received for outbound call.");
-                if (event.track) {
-                    event.track.onended = () => {
-                        console.log("Mobile: Remote audio track ended (outbound call), ending call.");
-                        endCall();
-                    };
-                }
             };
 
+            const rawOutboundId = 'out_' + Date.now();
+            const callKitUuid = registerCallKitMapping(rawOutboundId);
+            try {
+                if (Platform.OS === 'ios') {
+                    RNCallKeep.startCall(callKitUuid, lead.phone, lead.name || lead.phone, 'generic', false);
+                }
+            } catch (e) {}
+
+            let outboundDisconnectTimer = null;
             pc.onconnectionstatechange = () => {
                 console.log("Mobile: Outbound WebRTC connectionState:", pc.connectionState);
-                if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-                    console.log("Mobile: Remote peer disconnected WebRTC, ending call.");
+                if (pc.connectionState === 'connected') {
+                    if (outboundDisconnectTimer) { clearTimeout(outboundDisconnectTimer); outboundDisconnectTimer = null; }
+                    if (outboundRingingTimeoutRef.current) {
+                        clearTimeout(outboundRingingTimeoutRef.current);
+                        outboundRingingTimeoutRef.current = null;
+                    }
+                    try {
+                        RNCallKeep.setCurrentCallActive(callKitUuid);
+                    } catch (e) {}
+                    setActiveCall(prev => prev ? { ...prev, status: 'CONNECTED' } : null);
+                } else if (['failed', 'closed'].includes(pc.connectionState)) {
+                    console.log("Mobile: Outbound WebRTC failed/closed, ending call.");
+                    if (outboundDisconnectTimer) clearTimeout(outboundDisconnectTimer);
                     endCall();
+                } else if (pc.connectionState === 'disconnected') {
+                    console.log("Mobile: Outbound WebRTC disconnected temporarily, waiting 6s for reconnect...");
+                    if (!outboundDisconnectTimer) {
+                        outboundDisconnectTimer = setTimeout(() => {
+                            if (pcRef.current && pcRef.current.connectionState === 'disconnected') {
+                                console.log("Mobile: Outbound WebRTC disconnected for >6s, ending call.");
+                                endCall();
+                            }
+                        }, 6000);
+                    }
                 }
             };
             pc.oniceconnectionstatechange = () => {
                 console.log("Mobile: Outbound WebRTC iceConnectionState:", pc.iceConnectionState);
-                if (['disconnected', 'failed', 'closed'].includes(pc.iceConnectionState)) {
-                    console.log("Mobile: ICE disconnected/failed, ending call.");
+                if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+                    if (outboundDisconnectTimer) { clearTimeout(outboundDisconnectTimer); outboundDisconnectTimer = null; }
+                    if (outboundRingingTimeoutRef.current) {
+                        clearTimeout(outboundRingingTimeoutRef.current);
+                        outboundRingingTimeoutRef.current = null;
+                    }
+                    try {
+                        RNCallKeep.setCurrentCallActive(callKitUuid);
+                    } catch (e) {}
+                    setActiveCall(prev => prev ? { ...prev, status: 'CONNECTED' } : null);
+                } else if (pc.iceConnectionState === 'failed') {
+                    console.log("Mobile: Outbound ICE failed, ending call.");
+                    if (outboundDisconnectTimer) clearTimeout(outboundDisconnectTimer);
                     endCall();
                 }
             };
 
             const callObj = {
-                callId: null,
+                callId: rawOutboundId,
                 from: lead.phone,
                 leadName: lead.name || lead.phone,
-                businessType: campaignType || 'FREE_SEMINAR',
+                businessId: businessId || lead.businessId,
+                businessType: campaignType || lead.campaignType || 'FREE_SEMINAR',
                 startTime: new Date(),
                 peerConnection: pc,
                 localStream: stream,
@@ -680,6 +869,9 @@ export const CallProvider = ({ children }) => {
 
                     if (res.data?.success) {
                         const callId = res.data.callId;
+                        registerCallKitMapping(callId);
+                        callIdMapRef.current.set(String(callId).toLowerCase(), callKitUuid);
+                        callIdMapRef.current.set(callKitUuid.toLowerCase(), callId);
                         setActiveCall(prev => prev ? { ...prev, callId, status: prev.status === 'CONNECTED' ? 'CONNECTED' : 'RINGING' } : null);
                     }
                 } catch (err) {
@@ -720,6 +912,8 @@ export const CallProvider = ({ children }) => {
             saveCallLog({
                 phone: currentIncoming.from,
                 leadName: currentIncoming.leadName,
+                businessId: currentIncoming.businessId,
+                businessType: currentIncoming.businessType,
                 isOutbound: false,
                 status: 'REJECTED',
                 duration: 0,
@@ -771,6 +965,8 @@ export const CallProvider = ({ children }) => {
             saveCallLog({
                 phone: currActive.from,
                 leadName: currActive.leadName,
+                businessId: currActive.businessId,
+                businessType: currActive.businessType,
                 isOutbound: Boolean(currActive.isOutbound),
                 status: currActive.status === 'CONNECTED' ? 'COMPLETED' : 'MISSED',
                 duration,
@@ -832,8 +1028,38 @@ export const CallProvider = ({ children }) => {
         activeCallRef.current = null;
         setActiveCall(null);
         setIsOnHold(false);
+        setIsSpeakerOn(false);
         setIsCallMinimized(false);
         stopRinging();
+    };
+
+    // Toggle Loudspeaker / Earpiece
+    const toggleSpeaker = async () => {
+        const nextSpeaker = !isSpeakerOn;
+        setIsSpeakerOn(nextSpeaker);
+        const curr = activeCallRef.current || activeCall;
+        const callKitUuid = curr?.callId ? registerCallKitMapping(curr.callId) : null;
+
+        try {
+            if (Platform.OS === 'ios') {
+                try {
+                    const routes = await RNCallKeep.getAudioRoutes();
+                    console.log('Mobile: Available audio routes:', routes);
+                } catch (e) {}
+
+                const targetRoute = nextSpeaker ? 'Speaker' : 'Phone';
+                await RNCallKeep.setAudioRoute(callKitUuid || '', targetRoute);
+                console.log('Mobile: iOS audio route set to:', targetRoute);
+            } else {
+                RNCallKeep.toggleAudioRouteSpeaker(callKitUuid || '', nextSpeaker);
+                try {
+                    await RNCallKeep.setAudioRoute(callKitUuid || '', nextSpeaker ? 'SPEAKER' : 'EARPIECE');
+                } catch (e) {}
+                console.log('Mobile: Android audio route toggled to speaker:', nextSpeaker);
+            }
+        } catch (err) {
+            console.log('Mobile: Audio route toggle error:', err?.message || err);
+        }
     };
 
     // Toggle Mic Mute
@@ -918,6 +1144,7 @@ export const CallProvider = ({ children }) => {
             isRinging,
             agentStatus,
             isOnHold,
+            isSpeakerOn,
             isCallMinimized,
             changeStatus,
             answerCall,
@@ -926,6 +1153,7 @@ export const CallProvider = ({ children }) => {
             endCall,
             toggleMute,
             toggleHold,
+            toggleSpeaker,
             toggleMinimize
         }}>
             {children}
@@ -937,6 +1165,7 @@ export const CallProvider = ({ children }) => {
                     repeat={true}
                     playInBackground={true}
                     ignoreSilentSwitch="ignore"
+                    mixWithOthers="mix"
                     style={{ width: 0, height: 0, position: 'absolute' }}
                     onError={(err) => console.log('Mobile: Ringtone audio error (handled):', err?.error || err)}
                 />
@@ -951,7 +1180,10 @@ export const CallProvider = ({ children }) => {
                     }}
                     audioOnly={true}
                     repeat={true}
+                    paused={false}
                     playInBackground={true}
+                    playWhenInactive={true}
+                    mixWithOthers="mix"
                     ignoreSilentSwitch="ignore"
                     style={{ width: 0, height: 0, position: 'absolute' }}
                     onError={(err) => console.log('Mobile: Hold music audio error (handled):', err?.error || err)}

@@ -183,7 +183,12 @@ export default function WhatsAppChatScreen({ route, navigation }) {
                 ? `/coordinator-crm/messages/${leadId}`
                 : `/after-seminar-crm/messages/${leadId}`;
             
-            const res = await api.get(endpoint);
+            const res = await api.get(endpoint, {
+                params: {
+                    businessId: businessId || lead?.businessId || '',
+                    phone: leadPhone
+                }
+            });
             const msgList = Array.isArray(res.data) ? res.data : [];
             setMessages(msgList);
         } catch (e) {
@@ -191,7 +196,7 @@ export default function WhatsAppChatScreen({ route, navigation }) {
         } finally {
             setLoading(false);
         }
-    }, [leadId, crmType]);
+    }, [leadId, crmType, businessId, lead?.businessId, leadPhone]);
 
     // Fetch Quick Replies
     const fetchQuickReplies = async () => {
@@ -213,8 +218,14 @@ export default function WhatsAppChatScreen({ route, navigation }) {
         if (!socket || !leadId) return;
 
         const handleNewMessage = (data) => {
-            if (data?.leadId === leadId || String(data?.leadId) === String(leadId)) {
-                console.log("Mobile: New message received for this lead, refreshing chat thread...");
+            const matchesLead = data?.leadId && (String(data.leadId) === String(leadId));
+            const matchesPhone = data?.phone && leadPhone && (String(data.phone).endsWith(String(leadPhone)) || String(leadPhone).endsWith(String(data.phone)));
+            const currentBiz = String(businessId || lead?.businessId || '').toLowerCase();
+            const eventBiz = String(data?.businessId || '').toLowerCase();
+            const bizMatch = !eventBiz || !currentBiz || eventBiz === currentBiz;
+
+            if ((matchesLead || matchesPhone) && bizMatch) {
+                console.log("Mobile: New message received for this lead & business, refreshing chat thread...");
                 fetchMessages();
             }
         };
@@ -223,21 +234,36 @@ export default function WhatsAppChatScreen({ route, navigation }) {
         return () => {
             socket.off('new_inbound_message', handleNewMessage);
         };
-    }, [socket, leadId, fetchMessages]);
+    }, [socket, leadId, leadPhone, businessId, lead?.businessId, fetchMessages]);
 
-    // Load Call History from local storage & sync
+    // Load Call History from local storage & sync scoped by business
     const fetchCallHistory = useCallback(async () => {
         const cleanPhone = String(leadPhone || '').replace(/[^0-9]/g, '');
         if (!cleanPhone) return;
+        const bizKey = String(businessId || lead?.businessId || crmType || 'general').trim().toLowerCase();
         try {
-            const key = `@wa_call_history_${cleanPhone}`;
-            const localData = await AsyncStorage.getItem(key);
-            const localList = localData ? JSON.parse(localData) : [];
+            const scopedKey = `@wa_call_history_${bizKey}_${cleanPhone}`;
+            const localData = await AsyncStorage.getItem(scopedKey);
+            let localList = localData ? JSON.parse(localData) : [];
+
+            // Fallback for previous logs stored under phone only if scoped has no records
+            if (localList.length === 0) {
+                const legacyKey = `@wa_call_history_${cleanPhone}`;
+                const legacyData = await AsyncStorage.getItem(legacyKey);
+                if (legacyData) {
+                    const parsed = JSON.parse(legacyData);
+                    localList = parsed.filter(item => {
+                        if (!item.businessId && !item.businessType) return true;
+                        const itemBiz = String(item.businessId || item.businessType).toLowerCase();
+                        return itemBiz === bizKey;
+                    });
+                }
+            }
             setCallLogs(localList);
         } catch (e) {
             console.log("Mobile: Error loading call history:", e?.message);
         }
-    }, [leadPhone]);
+    }, [leadPhone, businessId, lead?.businessId, crmType]);
 
     useEffect(() => {
         fetchCallHistory();
@@ -245,13 +271,17 @@ export default function WhatsAppChatScreen({ route, navigation }) {
         const sub = DeviceEventEmitter.addListener('new_call_history_event', (event) => {
             const cleanLead = String(leadPhone || '').replace(/[^0-9]/g, '');
             const eventPhone = String(event?.phone || '').replace(/[^0-9]/g, '');
-            if (cleanLead && eventPhone && (cleanLead.endsWith(eventPhone) || eventPhone.endsWith(cleanLead))) {
+            const eventBiz = String(event?.businessId || event?.businessType || '').toLowerCase();
+            const currentBiz = String(businessId || lead?.businessId || crmType || '').toLowerCase();
+            const bizMatch = !eventBiz || !currentBiz || eventBiz === currentBiz;
+
+            if (bizMatch && cleanLead && eventPhone && (cleanLead.endsWith(eventPhone) || eventPhone.endsWith(cleanLead))) {
                 setCallLogs(prev => [event, ...prev.filter(c => c.id !== event.id)]);
             }
         });
 
         return () => sub.remove();
-    }, [leadPhone, fetchCallHistory]);
+    }, [leadPhone, businessId, lead?.businessId, crmType, fetchCallHistory]);
 
     // Unified Feed (Messages + Voice Calls) sorted chronologically
     const mergedFeed = useMemo(() => {
@@ -326,6 +356,8 @@ export default function WhatsAppChatScreen({ route, navigation }) {
 
             const payload = {
                 leadId,
+                businessId: businessId || lead?.businessId,
+                phone: leadPhone,
                 message: text.trim(),
                 senderName: userInfo?.firstName || 'Staff'
             };
