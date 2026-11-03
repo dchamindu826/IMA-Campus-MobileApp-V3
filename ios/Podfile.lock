@@ -2993,6 +2993,8 @@ PODS:
     - React-perflogger (= 0.83.2)
     - React-utils (= 0.83.2)
     - SocketRocket
+  - RNCallKeep (4.6.1):
+    - React
   - RNCAsyncStorage (2.2.0):
     - boost
     - DoubleConversion
@@ -3203,6 +3205,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
+  - RNVoipPushNotification (3.3.3):
+    - React-Core
   - SDWebImage (5.21.7):
     - SDWebImage/Core (= 5.21.7)
   - SDWebImage/Core (5.21.7)
@@ -3314,6 +3318,7 @@ DEPENDENCIES:
   - ReactAppDependencyProvider (from `build/generated/ios/ReactAppDependencyProvider`)
   - ReactCodegen (from `build/generated/ios/ReactCodegen`)
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
+  - RNCallKeep (from `../node_modules/react-native-callkeep`)
   - "RNCAsyncStorage (from `../node_modules/@react-native-async-storage/async-storage`)"
   - "RNCPicker (from `../node_modules/@react-native-picker/picker`)"
   - "RNFBApp (from `../node_modules/@react-native-firebase/app`)"
@@ -3322,6 +3327,7 @@ DEPENDENCIES:
   - "RNNotifee (from `../node_modules/@notifee/react-native`)"
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNVectorIcons (from `../node_modules/react-native-vector-icons`)
+  - RNVoipPushNotification (from `../node_modules/react-native-voip-push-notification`)
   - SDWebImage
   - SocketRocket (~> 0.7.1)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
@@ -3545,6 +3551,8 @@ EXTERNAL SOURCES:
     :path: build/generated/ios/ReactCodegen
   ReactCommon:
     :path: "../node_modules/react-native/ReactCommon"
+  RNCallKeep:
+    :path: "../node_modules/react-native-callkeep"
   RNCAsyncStorage:
     :path: "../node_modules/@react-native-async-storage/async-storage"
   RNCPicker:
@@ -3561,6 +3569,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-screens"
   RNVectorIcons:
     :path: "../node_modules/react-native-vector-icons"
+  RNVoipPushNotification:
+    :path: "../node_modules/react-native-voip-push-notification"
   Yoga:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
@@ -3678,6 +3688,7 @@ SPEC CHECKSUMS:
   ReactAppDependencyProvider: d69159b417e8c9d82b8fe4d0a27def4c3e8f767f
   ReactCodegen: 7456de84eece108533dd15d52a6fc123802cf2ce
   ReactCommon: b3a9c15f0c2f4849cac0cf01e626cfa7f1a2e887
+  RNCallKeep: 4c59e58733e431d430782b258db426074501cd62
   RNCAsyncStorage: 29f0230e1a25f36c20b05f65e2eb8958d6526e82
   RNCPicker: bf95ec4b2483e2ab256047130bc536b437cd916c
   RNFBApp: 0c7f6663ca9ae2169967b36fc48ae043f9396fb7
@@ -3686,11 +3697,12 @@ SPEC CHECKSUMS:
   RNNotifee: 5e3b271e8ea7456a36eec994085543c9adca9168
   RNScreens: afaf526a9c804c3b4503f950cf3e67ed81e29ada
   RNVectorIcons: 791f13226ec4a3fd13062eda9e892159f0981fae
+  RNVoipPushNotification: 4998fe6724d421da616dca765da7dc421ff54c4e
   SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   SwiftUIIntrospect: fee9aa07293ee280373a591e1824e8ddc869ba5d
   Yoga: 3d56e80930898685da43cbf53b5843932df8e765
 
-PODFILE CHECKSUM: 6b3a44233eda99c0404ff175a615b889ecd4b340
+PODFILE CHECKSUM: f9513c267c39e1065859501523c8d6e2ea3be424
 
 COCOAPODS: 1.16.2

@@ -1,11 +1,38 @@
 import 'react-native-url-polyfill/auto';
-import { AppRegistry } from 'react-native';
+import { AppRegistry, Platform } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import notifee, { AndroidImportance } from '@notifee/react-native';
+import VoipPushNotification from 'react-native-voip-push-notification';
+import RNCallKeep from 'react-native-callkeep';
 import App from './App';
 import { name as appName } from './app.json';
 
-// 🔥 Background & Killed App Message Handler
+// 🔥 iOS Background & Killed App VoIP PushKit Handler
+if (Platform.OS === 'ios') {
+  VoipPushNotification.addEventListener('notification', async (notification) => {
+    console.log('[VoIP Push] PushKit notification received while background/killed:', notification);
+    const uuid = notification.callId || notification.uuid || 'call_' + Date.now();
+    const callerName = notification.leadName || notification.callerName || 'Student';
+    const callerHandle = notification.from || notification.handle || 'WhatsApp Call';
+
+    try {
+      RNCallKeep.displayIncomingCall(
+        uuid,
+        callerHandle,
+        callerName,
+        'generic',
+        false
+      );
+    } catch (err) {
+      console.log('[VoIP Push] Error displaying native CallKit UI:', err);
+    }
+
+    // Tell iOS completion
+    VoipPushNotification.onVoipNotificationCompleted(uuid);
+  });
+}
+
+// 🔥 Android Background & Killed App FCM Message Handler
 messaging().setBackgroundMessageHandler(async remoteMessage => {
   console.log('[Background FCM] Message Received:', remoteMessage);
 

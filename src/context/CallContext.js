@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { DeviceEventEmitter } from 'react-native';
+import { DeviceEventEmitter, Platform } from 'react-native';
 import { io } from 'socket.io-client';
 import api from '../services/api';
 import { RTCPeerConnection, RTCSessionDescription, mediaDevices } from 'react-native-webrtc';
 import Video from 'react-native-video';
 import messaging from '@react-native-firebase/messaging';
+import VoipPushNotification from 'react-native-voip-push-notification';
+import RNCallKeep from 'react-native-callkeep';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from './AuthContext';
 
@@ -77,7 +79,7 @@ export const CallProvider = ({ children }) => {
         }
     }, [userInfo?.agentStatus]);
 
-    // Register FCM Token for Background / Killed Incoming Call notifications
+    // Register FCM & Apple VoIP Tokens for Background / Killed Incoming Call notifications
     useEffect(() => {
         if (!userToken || !userInfo) return;
         const roleUpper = String(userInfo.role || '').toUpperCase();
@@ -93,6 +95,22 @@ export const CallProvider = ({ children }) => {
             } catch (err) {
                 console.log('Mobile: Error syncing FCM token:', err?.message);
             }
+
+            // Register Apple VoIP Token on iOS
+            if (Platform.OS === 'ios') {
+                try {
+                    const onVoipRegister = async (token) => {
+                        console.log('Mobile: Staff iOS VoIP Push Token registered:', token);
+                        if (token) {
+                            await api.post('/mobile/staff/voip-token', { voipToken: token }).catch(() => {});
+                        }
+                    };
+                    VoipPushNotification.addEventListener('register', onVoipRegister);
+                    VoipPushNotification.registerVoipNotification();
+                } catch (voipErr) {
+                    console.log('Mobile: Error registering VoIP Push:', voipErr?.message);
+                }
+            }
         };
 
         registerDeviceToken();
@@ -104,6 +122,63 @@ export const CallProvider = ({ children }) => {
 
         return () => unsubscribe();
     }, [userToken, userInfo]);
+
+    // Setup CallKit (iOS) and ConnectionService (Android) via RNCallKeep
+    useEffect(() => {
+        const setupCallKeep = async () => {
+            try {
+                await RNCallKeep.setup({
+                    ios: {
+                        appName: 'IMA Campus',
+                        imageName: 'ic_launcher',
+                        supportsVideo: false,
+                        maximumCallGroups: '1',
+                        maximumCallsPerCallGroup: '1'
+                    },
+                    android: {
+                        alertTitle: 'Permissions required',
+                        alertDescription: 'This application needs to access your phone accounts',
+                        cancelButton: 'Cancel',
+                        okButton: 'OK',
+                        imageName: 'ic_launcher',
+                        additionalPermissions: []
+                    }
+                });
+                RNCallKeep.setAvailable(true);
+            } catch (err) {
+                console.log('Mobile: RNCallKeep setup error:', err?.message || err);
+            }
+        };
+
+        setupCallKeep();
+
+        const onAnswer = ({ callUUID }) => {
+            console.log('Mobile: CallKeep native answerCall event for callUUID:', callUUID);
+            RNCallKeep.setCurrentCallActive(callUUID);
+            const currentIncoming = incomingCallRef.current;
+            answerCall(callUUID, currentIncoming?.sdp || currentIncoming?.offerSdp);
+        };
+
+        const onEnd = ({ callUUID }) => {
+            console.log('Mobile: CallKeep native endCall event for callUUID:', callUUID);
+            endCall();
+        };
+
+        const onMute = () => {
+            toggleMute();
+        };
+
+        RNCallKeep.addEventListener('answerCall', onAnswer);
+        RNCallKeep.addEventListener('endCall', onEnd);
+        RNCallKeep.addEventListener('didPerformSetMutedCallAction', onMute);
+
+        return () => {
+            RNCallKeep.removeEventListener('answerCall', onAnswer);
+            RNCallKeep.removeEventListener('endCall', onEnd);
+            RNCallKeep.removeEventListener('didPerformSetMutedCallAction', onMute);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Socket Initialization
     useEffect(() => {
@@ -190,6 +265,14 @@ export const CallProvider = ({ children }) => {
             if (!activeCall) {
                 setIncomingCall(data);
                 setIsRinging(true);
+
+                // Show Native iOS CallKit / Android Calling Screen
+                const callUuid = data?.callId || 'call_' + Date.now();
+                const callerName = data?.leadName || 'Student';
+                const callerPhone = data?.from || 'WhatsApp Call';
+                try {
+                    RNCallKeep.displayIncomingCall(callUuid, callerPhone, callerName, 'generic', false);
+                } catch (e) {}
             }
         };
 
@@ -427,6 +510,10 @@ export const CallProvider = ({ children }) => {
                 status: 'CONNECTED'
             } : null);
 
+            try {
+                RNCallKeep.setCurrentCallActive(targetCallId);
+            } catch (e) {}
+
             setIncomingCall(null);
 
         } catch (err) {
@@ -563,6 +650,12 @@ export const CallProvider = ({ children }) => {
         }
         stopRinging();
 
+        if (targetCallId) {
+            try {
+                RNCallKeep.endCall(targetCallId);
+            } catch (e) {}
+        }
+
         if (socket && socket.connected && targetCallId) {
             const rejectPayload = {
                 callId: targetCallId,
@@ -615,6 +708,12 @@ export const CallProvider = ({ children }) => {
                 };
                 socket.emit('end_wa_call', termPayload);
                 socket.emit('whatsapp_call_terminate', termPayload);
+            }
+
+            if (currActive.callId) {
+                try {
+                    RNCallKeep.endCall(currActive.callId);
+                } catch (e) {}
             }
 
             try {
