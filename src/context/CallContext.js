@@ -8,11 +8,33 @@ import messaging from '@react-native-firebase/messaging';
 import VoipPushNotification from 'react-native-voip-push-notification';
 import RNCallKeep from 'react-native-callkeep';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import CryptoJS from 'crypto-js';
 import { AuthContext } from './AuthContext';
 
 export const CallContext = createContext();
 
 export const useCall = () => useContext(CallContext);
+
+export const toCallKitUUID = (rawString) => {
+    if (!rawString || typeof rawString !== 'string') {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(rawString)) {
+        return rawString.toLowerCase();
+    }
+    const hash = CryptoJS.SHA256(rawString).toString(CryptoJS.enc.Hex);
+    const part1 = hash.substring(0, 8);
+    const part2 = hash.substring(8, 12);
+    const part3 = '4' + hash.substring(13, 16);
+    const part4 = ((parseInt(hash.substring(16, 17), 16) & 0x3) | 0x8).toString(16) + hash.substring(17, 20);
+    const part5 = hash.substring(20, 32);
+    return `${part1}-${part2}-${part3}-${part4}-${part5}`.toLowerCase();
+};
 
 const ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -65,6 +87,20 @@ export const CallProvider = ({ children }) => {
     const outboundRingingTimeoutRef = useRef(null);
     const activeCallRef = useRef(null);
     const incomingCallRef = useRef(null);
+    const callIdMapRef = useRef(new Map());
+
+    const registerCallKitMapping = (rawId) => {
+        if (!rawId) return null;
+        const callKitUuid = toCallKitUUID(rawId);
+        callIdMapRef.current.set(callKitUuid.toLowerCase(), rawId);
+        callIdMapRef.current.set(String(rawId).toLowerCase(), callKitUuid);
+        return callKitUuid;
+    };
+
+    const getRealCallId = (uuidOrId) => {
+        if (!uuidOrId) return uuidOrId;
+        return callIdMapRef.current.get(String(uuidOrId).toLowerCase()) || uuidOrId;
+    };
 
     useEffect(() => {
         activeCallRef.current = activeCall;
@@ -160,9 +196,13 @@ export const CallProvider = ({ children }) => {
 
         const onAnswer = ({ callUUID }) => {
             console.log('Mobile: CallKeep native answerCall event for callUUID:', callUUID);
-            RNCallKeep.setCurrentCallActive(callUUID);
+            const realCallId = getRealCallId(callUUID);
+            const callKitUuid = registerCallKitMapping(realCallId);
+            try {
+                RNCallKeep.setCurrentCallActive(callKitUuid);
+            } catch (e) {}
             const currentIncoming = incomingCallRef.current;
-            answerCall(callUUID, currentIncoming?.sdp || currentIncoming?.offerSdp);
+            answerCall(realCallId, currentIncoming?.sdp || currentIncoming?.offerSdp);
         };
 
         const onEnd = ({ callUUID }) => {
@@ -174,14 +214,42 @@ export const CallProvider = ({ children }) => {
             toggleMute();
         };
 
+        const onHold = ({ hold, callUUID }) => {
+            console.log('Mobile: CallKeep native didToggleHoldAction event:', hold, callUUID);
+            const curr = activeCallRef.current;
+            if (curr) {
+                const nextHold = Boolean(hold);
+                setIsOnHold(nextHold);
+                if (curr.localStream) {
+                    try {
+                        const tracks = curr.localStream.getAudioTracks();
+                        tracks.forEach(t => { t.enabled = !nextHold; });
+                    } catch (err) {}
+                }
+                if (socket && socket.connected && curr.callId) {
+                    const holdPayload = {
+                        callId: curr.callId,
+                        onHold: nextHold,
+                        businessType: curr.businessType,
+                        receivingWaNumId: curr.receivingWaNumId,
+                        leadPhone: curr.from
+                    };
+                    socket.emit('hold_wa_call', holdPayload);
+                    socket.emit('whatsapp_call_hold', holdPayload);
+                }
+            }
+        };
+
         RNCallKeep.addEventListener('answerCall', onAnswer);
         RNCallKeep.addEventListener('endCall', onEnd);
         RNCallKeep.addEventListener('didPerformSetMutedCallAction', onMute);
+        RNCallKeep.addEventListener('didToggleHoldAction', onHold);
 
         return () => {
             RNCallKeep.removeEventListener('answerCall', onAnswer);
             RNCallKeep.removeEventListener('endCall', onEnd);
             RNCallKeep.removeEventListener('didPerformSetMutedCallAction', onMute);
+            RNCallKeep.removeEventListener('didToggleHoldAction', onHold);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -273,12 +341,15 @@ export const CallProvider = ({ children }) => {
                 setIsRinging(true);
 
                 // Show Native iOS CallKit / Android Calling Screen
-                const callUuid = data?.callId || 'call_' + Date.now();
+                const rawCallId = data?.callId || 'call_' + Date.now();
+                const callKitUuid = registerCallKitMapping(rawCallId);
                 const callerName = data?.leadName || 'Student';
                 const callerPhone = data?.from || 'WhatsApp Call';
                 try {
-                    RNCallKeep.displayIncomingCall(callUuid, callerPhone, callerName, 'generic', false);
-                } catch (e) {}
+                    RNCallKeep.displayIncomingCall(callKitUuid, callerPhone, callerName, 'generic', false);
+                } catch (e) {
+                    console.log('Mobile: RNCallKeep displayIncomingCall error:', e);
+                }
             }
         };
 
@@ -517,7 +588,8 @@ export const CallProvider = ({ children }) => {
             } : null);
 
             try {
-                RNCallKeep.setCurrentCallActive(targetCallId);
+                const callKitUuid = registerCallKitMapping(targetCallId);
+                RNCallKeep.setCurrentCallActive(callKitUuid);
             } catch (e) {}
 
             setIncomingCall(null);
@@ -658,7 +730,8 @@ export const CallProvider = ({ children }) => {
 
         if (targetCallId) {
             try {
-                RNCallKeep.endCall(targetCallId);
+                const callKitUuid = registerCallKitMapping(targetCallId);
+                RNCallKeep.endCall(callKitUuid);
             } catch (e) {}
         }
 
@@ -718,7 +791,8 @@ export const CallProvider = ({ children }) => {
 
             if (currActive.callId) {
                 try {
-                    RNCallKeep.endCall(currActive.callId);
+                    const callKitUuid = registerCallKitMapping(currActive.callId);
+                    RNCallKeep.endCall(callKitUuid);
                 } catch (e) {}
             }
 
@@ -782,9 +856,15 @@ export const CallProvider = ({ children }) => {
 
         // When on hold, mute microphone so the remote customer hears hold music rather than staff
         if (curr.localStream) {
-            const audioTrack = curr.localStream.getAudioTracks()[0];
-            if (audioTrack) {
-                audioTrack.enabled = !nextHold;
+            try {
+                const audioTracks = curr.localStream.getAudioTracks();
+                if (audioTracks && audioTracks.length > 0) {
+                    audioTracks.forEach(track => {
+                        track.enabled = !nextHold;
+                    });
+                }
+            } catch (err) {
+                console.log('Mobile: localStream audioTracks mute error:', err);
             }
         }
 
@@ -812,11 +892,14 @@ export const CallProvider = ({ children }) => {
             }, { timeout: 6000 }).catch(() => {});
         } catch (e) {}
 
-        // Update CallKit hold state
+        // Update CallKit hold state safely
         if (curr.callId) {
             try {
-                RNCallKeep.setOnHold(curr.callId, nextHold);
-            } catch (e) {}
+                const callKitUuid = registerCallKitMapping(curr.callId);
+                RNCallKeep.setOnHold(callKitUuid, nextHold);
+            } catch (e) {
+                console.log('Mobile: RNCallKeep setOnHold error:', e);
+            }
         }
     };
 
@@ -855,17 +938,23 @@ export const CallProvider = ({ children }) => {
                     playInBackground={true}
                     ignoreSilentSwitch="ignore"
                     style={{ width: 0, height: 0, position: 'absolute' }}
+                    onError={(err) => console.log('Mobile: Ringtone audio error (handled):', err?.error || err)}
                 />
             )}
             {/* On-Hold Music */}
             {activeCall && isOnHold && (
                 <Video
-                    source={{ uri: (activeCall?.holdMusicUrl || incomingCall?.holdMusicUrl ? `${baseAudioUrl}${activeCall?.holdMusicUrl || incomingCall?.holdMusicUrl}` : 'https://commondatastorage.googleapis.com/codeskulptor-assets/Epoq-Lepidoptera.ogg') }}
+                    source={{
+                        uri: (activeCall?.holdMusicUrl || incomingCall?.holdMusicUrl)
+                            ? `${baseAudioUrl}${activeCall?.holdMusicUrl || incomingCall?.holdMusicUrl}`
+                            : 'https://assets.mixkit.co/music/preview/mixkit-serene-view-443.mp3'
+                    }}
                     audioOnly={true}
                     repeat={true}
                     playInBackground={true}
                     ignoreSilentSwitch="ignore"
                     style={{ width: 0, height: 0, position: 'absolute' }}
+                    onError={(err) => console.log('Mobile: Hold music audio error (handled):', err?.error || err)}
                 />
             )}
         </CallContext.Provider>
