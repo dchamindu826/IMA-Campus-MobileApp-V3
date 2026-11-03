@@ -22,6 +22,7 @@
         "NSPhotoLibraryUsageDescription": "The app accesses your photos to upload profile pictures.",
         "NSCameraUsageDescription": "The app accesses your camera to take profile pictures.",
         "NSMicrophoneUsageDescription": "The app accesses your microphone for video.",
+        "NSLocalNetworkUsageDescription": "Allow IMA Campus to connect to the local development server.",
         "UIAppFonts": [
           "AntDesign.ttf",
           "Entypo.ttf",

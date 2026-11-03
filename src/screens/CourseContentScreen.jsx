@@ -462,7 +462,8 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
 };
 
 const CourseContentScreen = ({ route, navigation }) => {
-    const { width } = useWindowDimensions();
+    const { width, height } = useWindowDimensions();
+    const isLandscape = width > height;
     const { courseId, courseTitle, hasAccess } = route.params;
     const [content, setContent] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -623,7 +624,7 @@ const CourseContentScreen = ({ route, navigation }) => {
             >
                 <View style={{ flex: 1, backgroundColor: '#000' }}>
 
-                    {!isYtFullscreen && (
+                    {!isLandscape && !isYtFullscreen && (
                         <View style={[styles.playerHeader, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
                             <TouchableOpacity onPress={closePlayer} style={styles.backBtn}>
                                 <Icon name="close" size={24} color="white" />
@@ -634,24 +635,19 @@ const CourseContentScreen = ({ route, navigation }) => {
                         </View>
                     )}
 
-                    {__DEV__ && !isYtFullscreen && (
-                        <Text style={{ color: '#0f0', fontSize: 11, paddingHorizontal: 20, paddingBottom: 8 }}>
-                            isYouTube: {String(playingItem?.isYouTube)} | ytId: {String(playingItem?.ytId)}{'\n'}
-                            link: {String(playingItem?.link)}
-                        </Text>
-                    )}
-
                     {playingItem?.isYouTube ? (
-                        <View style={isYtFullscreen ? StyleSheet.absoluteFillObject : { width: width, height: Math.round((width * 9) / 16), alignSelf: 'center', backgroundColor: '#000' }}>
-                            <YouTubePlayer
-                                key={String(playingItem.id || playingItem.ytId || playingItem.link)}
-                                url={playingItem.link || playingItem.youtubeLink}
-                                videoId={playingItem.ytId}
-                                autoPlay={true}
-                                onFullscreenChange={setIsYtFullscreen}
-                                onStatusChange={(d) => console.log('[YT status]', d?.status, d?.message)}
-                                style={{ width: '100%', height: '100%' }}
-                            />
+                        <View style={isLandscape ? StyleSheet.absoluteFillObject : { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
+                            <View style={isLandscape ? { width: '100%', height: '100%' } : { width: width, height: Math.round((width * 9) / 16), backgroundColor: '#000' }}>
+                                <YouTubePlayer
+                                    key={String(playingItem.id || playingItem.ytId || playingItem.link)}
+                                    url={playingItem.link || playingItem.youtubeLink}
+                                    videoId={playingItem.ytId}
+                                    autoPlay={true}
+                                    onFullscreenChange={setIsYtFullscreen}
+                                    onStatusChange={(d) => console.log('[YT status]', d?.status, d?.message)}
+                                    style={{ width: '100%', height: '100%' }}
+                                />
+                            </View>
                         </View>
                     ) : (
                         // Zoom / offline video (kalin thibba widihatama)

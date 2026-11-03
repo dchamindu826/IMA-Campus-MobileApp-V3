@@ -107,8 +107,12 @@ export const CallProvider = ({ children }) => {
                             await api.post('/mobile/staff/voip-token', { voipToken: token }).catch(() => {});
                         }
                     };
-                    VoipPushNotification.addEventListener('register', onVoipRegister);
-                    VoipPushNotification.registerVoipNotification();
+                    if (VoipPushNotification && typeof VoipPushNotification.addEventListener === 'function') {
+                        VoipPushNotification.addEventListener('register', onVoipRegister);
+                        if (typeof VoipPushNotification.registerVoipToken === 'function') {
+                            VoipPushNotification.registerVoipToken();
+                        }
+                    }
                 } catch (voipErr) {
                     console.log('Mobile: Error registering VoIP Push:', voipErr?.message);
                 }

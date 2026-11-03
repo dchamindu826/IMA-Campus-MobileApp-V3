@@ -9,27 +9,39 @@ import { name as appName } from './app.json';
 
 // 🔥 iOS Background & Killed App VoIP PushKit Handler
 if (Platform.OS === 'ios') {
-  VoipPushNotification.addEventListener('notification', async (notification) => {
-    console.log('[VoIP Push] PushKit notification received while background/killed:', notification);
-    const uuid = notification.callId || notification.uuid || 'call_' + Date.now();
-    const callerName = notification.leadName || notification.callerName || 'Student';
-    const callerHandle = notification.from || notification.handle || 'WhatsApp Call';
+  try {
+    if (VoipPushNotification && typeof VoipPushNotification.addEventListener === 'function') {
+      VoipPushNotification.addEventListener('notification', async (notification) => {
+        console.log('[VoIP Push] PushKit notification received while background/killed:', notification);
+        const uuid = notification?.callId || notification?.uuid || 'call_' + Date.now();
+        const callerName = notification?.leadName || notification?.callerName || 'Student';
+        const callerHandle = notification?.from || notification?.handle || 'WhatsApp Call';
 
-    try {
-      RNCallKeep.displayIncomingCall(
-        uuid,
-        callerHandle,
-        callerName,
-        'generic',
-        false
-      );
-    } catch (err) {
-      console.log('[VoIP Push] Error displaying native CallKit UI:', err);
+        try {
+          if (RNCallKeep && typeof RNCallKeep.displayIncomingCall === 'function') {
+            RNCallKeep.displayIncomingCall(
+              uuid,
+              callerHandle,
+              callerName,
+              'generic',
+              false
+            );
+          }
+        } catch (err) {
+          console.log('[VoIP Push] Error displaying native CallKit UI:', err);
+        }
+
+        // Tell iOS completion
+        try {
+          VoipPushNotification.onVoipNotificationCompleted(uuid);
+        } catch (compErr) {
+          console.log('[VoIP Push] Completion error:', compErr);
+        }
+      });
     }
-
-    // Tell iOS completion
-    VoipPushNotification.onVoipNotificationCompleted(uuid);
-  });
+  } catch (err) {
+    console.log('[VoIP Push] Registration error:', err);
+  }
 }
 
 // 🔥 Android Background & Killed App FCM Message Handler

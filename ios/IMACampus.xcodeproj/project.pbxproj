@@ -177,7 +177,7 @@
 				LastUpgradeCheck = 2710;
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
-						DevelopmentTeam = VPBH5348KQ;
+						DevelopmentTeam = "VPBH5348KQ";
 						LastSwiftMigration = 1250;
 						ProvisioningStyle = Automatic;
 					};
@@ -507,6 +507,7 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
+				DEVELOPMENT_TEAM = "VPBH5348KQ";
 			};
 			name = Debug;
 		};
@@ -540,6 +541,7 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
+				DEVELOPMENT_TEAM = "VPBH5348KQ";
 			};
 			name = Release;
 		};

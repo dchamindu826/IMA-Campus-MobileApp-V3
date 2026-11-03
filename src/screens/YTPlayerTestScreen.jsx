@@ -29,6 +29,7 @@ export default function YTPlayerTestScreen({ navigation }) {
   const [activeUrl, setActiveUrl] = useState('https://youtube.com/live/UloSAi-MgPY');
   const [logs, setLogs] = useState([]);
   const [currentStatus, setCurrentStatus] = useState('Idle');
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const parsed = parseYouTubeUrl(activeUrl);
 
@@ -71,12 +72,13 @@ export default function YTPlayerTestScreen({ navigation }) {
       </View>
 
       {/* Pinned Video Player Card at the Top */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 10 }}>
-        <View style={styles.playerCard}>
+      <View style={isFullscreen ? [StyleSheet.absoluteFillObject, { zIndex: 99999, elevation: 99999, backgroundColor: '#000' }] : { paddingHorizontal: 16, paddingTop: 10 }}>
+        <View style={isFullscreen ? { flex: 1, backgroundColor: '#000' } : styles.playerCard}>
           <YouTubePlayer
             key={activeUrl}
             url={activeUrl}
             autoPlay={true}
+            onFullscreenChange={setIsFullscreen}
             onStatus={(status, data) => addLog(status, typeof data === 'object' ? (data.message || status) : String(data))}
             onStatusChange={(data) => addLog(data.status, data.message)}
           />
