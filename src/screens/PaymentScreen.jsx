@@ -109,6 +109,29 @@ const PaymentsScreen = ({ navigation }) => {
 
     const isOverdue = statusText === 'Overdue';
 
+    const extractAmountFromRemark = (remark) => {
+      if (!remark) return 0;
+      const match = String(remark).match(/(?:Extracted Total|Target Amount|LKR|Rs\.?)\s*:?\s*(?:LKR|Rs\.?)?\s*([\d,]+(?:\.\d{1,2})?)/i);
+      if (match && match[1]) {
+        return parseFloat(match[1].replace(/,/g, ''));
+      }
+      return 0;
+    };
+
+    let displayAmount = parseFloat(
+      item.amount ||
+      item.actualAmountPaid ||
+      item.paidAmount ||
+      item.amountPaid ||
+      item.customAmount ||
+      item.totalAmount ||
+      0
+    );
+
+    if (displayAmount === 0 && item.remark) {
+      displayAmount = extractAmountFromRemark(item.remark);
+    }
+
     return (
       <View style={[styles.card, isOverdue && styles.cardOverdue]}>
         {/* 🔥 Web එකේ වගේ Overdue නම් රතු පාට ඉරක් අයිනෙන් වැටෙන්න */}
@@ -145,8 +168,8 @@ const PaymentsScreen = ({ navigation }) => {
 
         <View style={styles.cardFooter}>
           <View>
-            <Text style={styles.label}>AMOUNT PAYABLE</Text>
-            <Text style={styles.amountValue}>LKR {parseFloat(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+            <Text style={styles.label}>{isHistory ? 'AMOUNT PAID' : 'AMOUNT PAYABLE'}</Text>
+            <Text style={styles.amountValue}>LKR {displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
           </View>
 
           {!isHistory && (

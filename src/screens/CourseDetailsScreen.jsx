@@ -33,9 +33,6 @@ const CourseDetailsScreen = ({ route, navigation }) => {
     const [fullPaidSubjects, setFullPaidSubjects] = useState([]);
     const [batchInstallments, setBatchInstallments] = useState([]);
 
-    const [totalAmount, setTotalAmount] = useState(0);
-    const [isDiscountApplied, setIsDiscountApplied] = useState(false);
-    const [activeDiscountPrice, setActiveDiscountPrice] = useState(null);
     const [loading, setLoading] = useState(false);
 
     const [showInstallmentModal, setShowInstallmentModal] = useState(false);
@@ -148,26 +145,34 @@ const CourseDetailsScreen = ({ route, navigation }) => {
     }, [selectedMonthGroup, activeStream, isSpecialFlow, selectedClassType, groupPaidSubjects, fullPaidSubjects]);
 
     const toggleSubject = (courseId) => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setSelectedSubjects(prev => prev.includes(courseId) ? prev.filter(id => id !== courseId) : [...prev, courseId]);
     };
 
-    useEffect(() => {
+    const { totalAmount, isDiscountApplied, activeDiscountPrice } = useMemo(() => {
         try {
-            if (selectedSubjects.length === 0) { setTotalAmount(0); setIsDiscountApplied(false); setActiveDiscountPrice(null); return; }
-            let total = 0; let rules = [];
-            try { rules = JSON.parse(selectedMonthGroup?.discount_rules || '[]'); rules.sort((a, b) => b.courseCount - a.courseCount); } catch (e) { }
+            if (selectedSubjects.length === 0) {
+                return { totalAmount: 0, isDiscountApplied: false, activeDiscountPrice: null };
+            }
+            let total = 0;
+            let rules = [];
+            try {
+                rules = JSON.parse(selectedMonthGroup?.discount_rules || '[]');
+                rules.sort((a, b) => b.courseCount - a.courseCount);
+            } catch (e) { }
 
             const eligibleCount = filteredSubjects.filter(c => selectedSubjects.includes(c.id) && !c.isDiscountExcluded).length;
             let activeRule = null;
-            for (let rule of rules) { if (eligibleCount >= rule.courseCount) { activeRule = rule; break; } }
-
-            setIsDiscountApplied(!!activeRule);
-            if (activeRule && activeRule.pricePerCourse != null && activeRule.pricePerCourse !== '') {
-                setActiveDiscountPrice(activeRule.pricePerCourse);
-            } else {
-                setActiveDiscountPrice(null);
+            for (let rule of rules) {
+                if (eligibleCount >= rule.courseCount) {
+                    activeRule = rule;
+                    break;
+                }
             }
+
+            const discountApplied = !!activeRule;
+            const discountPrice = (activeRule && activeRule.pricePerCourse != null && activeRule.pricePerCourse !== '')
+                ? activeRule.pricePerCourse
+                : null;
 
             if (activeRule && activeRule.packagePrice != null && activeRule.packagePrice !== '') {
                 total = parseFloat(activeRule.packagePrice || 0);
@@ -186,8 +191,10 @@ const CourseDetailsScreen = ({ route, navigation }) => {
                     total = Math.max(0, total - parseFloat(activeRule.fixedDiscount));
                 }
             }
-            setTotalAmount(total);
-        } catch (err) { }
+            return { totalAmount: total, isDiscountApplied: discountApplied, activeDiscountPrice: discountPrice };
+        } catch (err) {
+            return { totalAmount: 0, isDiscountApplied: false, activeDiscountPrice: null };
+        }
     }, [selectedSubjects, filteredSubjects, selectedMonthGroup]);
 
     const checkInstallmentEligibility = () => {
@@ -236,56 +243,78 @@ const CourseDetailsScreen = ({ route, navigation }) => {
         const seenTheory = new Set();
         const seenPaper = new Set();
         const groups = Array.isArray(batch?.groups) ? batch.groups : Object.values(batch?.groups || {});
+        
+        let hasExplicitTheoryGroup = false;
+        let hasExplicitPaperGroup = false;
+
         groups.forEach(g => {
             const gClassType = parseInt(g.classType || 1, 10);
-            const courses = Array.isArray(g.courses) ? g.courses : Object.values(g.courses || {});
-            courses.forEach(c => {
-                const cleanName = (c.name || '').trim().toLowerCase();
-                const cType = parseInt(c.courseType || gClassType || 1, 10);
-                if (cType === 2) {
-                    if (!seenPaper.has(cleanName)) {
-                        seenPaper.add(cleanName);
-                        paperCount++;
+            if (gClassType === 2) hasExplicitPaperGroup = true;
+            if (gClassType === 1) hasExplicitTheoryGroup = true;
+
+            let courses = g.courses;
+            if (typeof courses === 'string') {
+                try { courses = JSON.parse(courses); } catch (e) { courses = []; }
+            }
+            const coursesList = Array.isArray(courses) ? courses : Object.values(courses || {});
+
+            if (coursesList.length === 0) {
+                if (gClassType === 2) paperCount++;
+                else theoryCount++;
+            } else {
+                coursesList.forEach(c => {
+                    const cleanName = (c.name || '').trim().toLowerCase();
+                    const cType = parseInt(c.courseType || gClassType || 1, 10);
+                    if (cType === 2) {
+                        if (!seenPaper.has(cleanName)) {
+                            seenPaper.add(cleanName);
+                            paperCount++;
+                        }
+                    } else {
+                        if (!seenTheory.has(cleanName)) {
+                            seenTheory.add(cleanName);
+                            theoryCount++;
+                        }
                     }
-                } else {
-                    if (!seenTheory.has(cleanName)) {
-                        seenTheory.add(cleanName);
-                        theoryCount++;
-                    }
-                }
-            });
+                });
+            }
         });
-        return { theoryCount, paperCount };
+
+        const hasTheory = theoryCount > 0 || hasExplicitTheoryGroup;
+        const hasPaper = paperCount > 0 || hasExplicitPaperGroup;
+        const hasBothStreams = (theoryCount > 0 && paperCount > 0) || (hasExplicitTheoryGroup && hasExplicitPaperGroup);
+
+        return { theoryCount, paperCount, hasTheory, hasPaper, hasBothStreams };
     };
 
     const isBatchDual = (batch) => {
         if (!batch) return false;
-        const bType = parseInt(batch.type || 1, 10);
-        const { theoryCount, paperCount } = getBatchCourseCounts(batch);
-        const groups = Array.isArray(batch.groups) ? batch.groups : Object.values(batch.groups || {});
-        const hasPaperGroups = groups.some(g => parseInt(g.classType || 1, 10) === 2);
-        const hasTheoryGroups = groups.some(g => parseInt(g.classType || 1, 10) === 1);
-        return (bType === 3 || bType === 4) || (paperCount > 0 && theoryCount > 0) || (hasPaperGroups && hasTheoryGroups);
+        return getBatchCourseCounts(batch).hasBothStreams;
     };
 
     const handleBatchSelect = (batch) => {
         setSelectedBatch(batch);
-        const bType = parseInt(batch?.type || 1, 10);
-        const { theoryCount, paperCount } = getBatchCourseCounts(batch);
-        const groups = Array.isArray(batch?.groups) ? batch.groups : Object.values(batch?.groups || {});
-        const hasPaperGroups = groups.some(g => parseInt(g.classType || 1, 10) === 2);
-        const hasTheoryGroups = groups.some(g => parseInt(g.classType || 1, 10) === 1);
-        const hasBoth = (bType === 3 || bType === 4) || (paperCount > 0 && theoryCount > 0) || (hasPaperGroups && hasTheoryGroups);
+        const { hasBothStreams, hasPaper, hasTheory } = getBatchCourseCounts(batch);
 
-        if (hasBoth) {
+        if (hasBothStreams) {
             changeStep(2.5);
-        } else if (bType === 2 || (paperCount > 0 && theoryCount === 0) || (hasPaperGroups && !hasTheoryGroups)) {
+        } else if (hasPaper && !hasTheory) {
             setSelectedClassType('paper');
             proceedToPaymentOrSubjects(batch, 'paper');
         } else {
             setSelectedClassType('theory');
             proceedToPaymentOrSubjects(batch, 'theory');
         }
+    };
+
+    const getBatchLogoUri = (batch) => {
+        if (batch?.logo && batch.logo !== 'default.png') {
+            return `${IMAGE_URL}icons/${batch.logo}`;
+        }
+        if (businessData?.logo && businessData.logo !== 'default.png') {
+            return `${IMAGE_URL}icons/${businessData.logo}`;
+        }
+        return null;
     };
 
     const proceedToPaymentOrSubjects = (batch, classType) => {
@@ -449,10 +478,11 @@ const CourseDetailsScreen = ({ route, navigation }) => {
                         {batches.length > 0 ? (
                             batches.map(batch => {
                                 const isSelected = selectedBatch?.id === batch.id;
+                                const batchLogoUri = getBatchLogoUri(batch);
                                 return (
                                     <TouchableOpacity activeOpacity={0.8} key={batch.id} style={[styles.modernCard, isSelected && styles.modernCardActive]} onPress={() => handleBatchSelect(batch)}>
-                                        {batch.logo && batch.logo !== 'default.png' ? (
-                                            <Image source={{ uri: `${IMAGE_URL}icons/${batch.logo}` }} style={{ width: 70, height: 70, borderRadius: 12, backgroundColor: '#fff', marginRight: 15 }} resizeMode="cover" />
+                                        {batchLogoUri ? (
+                                            <Image source={{ uri: batchLogoUri }} style={{ width: 70, height: 70, borderRadius: 12, backgroundColor: '#fff', marginRight: 15 }} resizeMode="cover" />
                                         ) : (
                                             <View style={{ width: 70, height: 70, borderRadius: 12, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginRight: 15 }}>
                                                 <Icon name="school" size={30} color={COLORS.primary} />
@@ -481,7 +511,7 @@ const CourseDetailsScreen = ({ route, navigation }) => {
                                     <Text style={styles.batchBadgeText}>{selectedBatch?.name}</Text>
                                 </View>
                                 <Text style={[styles.label, { textAlign: 'center', marginTop: 10, marginBottom: 4 }]}>Select Class Stream</Text>
-                                <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'center' }}>Choose between Theory or Paper classes to continue</Text>
+                                <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'center' }}>Choose between Theory or Paper class to continue</Text>
                             </View>
 
                             {/* THEORY CLASS CARD */}
@@ -546,38 +576,6 @@ const CourseDetailsScreen = ({ route, navigation }) => {
                                     <Icon name="chevron-right" size={26} color="rgba(255,255,255,0.7)" />
                                 </LinearGradient>
                             </TouchableOpacity>
-
-                            {/* BOTH (THEORY + PAPER) COMBO CARD */}
-                            <TouchableOpacity 
-                                activeOpacity={0.88} 
-                                onPress={() => {
-                                    setSelectedClassType('both');
-                                    proceedToPaymentOrSubjects(selectedBatch, 'both');
-                                }}
-                                style={{ marginTop: 16 }}
-                            >
-                                <LinearGradient 
-                                    colors={['#4C1D95', '#6D28D9', '#7C3AED']} 
-                                    start={{x:0, y:0}} 
-                                    end={{x:1, y:1}} 
-                                    style={styles.classStreamCard}
-                                >
-                                    <View style={styles.classStreamIconWrapPurple}>
-                                        <Icon name="layers-triple" size={36} color="#DDD6FE" />
-                                    </View>
-                                    <View style={{ flex: 1, marginLeft: 14 }}>
-                                        <View style={styles.streamBadgePurple}>
-                                            <Text style={styles.streamBadgeTextPurple}>⭐ {counts.theoryCount + counts.paperCount} Subjects Combo</Text>
-                                        </View>
-                                        <Text style={styles.classStreamTitle}>Theory + Paper (Both)</Text>
-                                        <Text style={styles.classStreamSub}>Complete Master Package & Past Papers</Text>
-                                        <Text style={styles.classStreamDesc} numberOfLines={2}>
-                                            Access both comprehensive Theory lectures and all Model / Past Paper exam sessions with maximum combo discounts!
-                                        </Text>
-                                    </View>
-                                    <Icon name="chevron-right" size={26} color="rgba(255,255,255,0.7)" />
-                                </LinearGradient>
-                            </TouchableOpacity>
                         </View>
                     );
                 })()}
@@ -595,9 +593,9 @@ const CourseDetailsScreen = ({ route, navigation }) => {
                     return (
                     <View style={styles.animateFade}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                            <View style={selectedClassType === 'paper' ? styles.streamBadgeAmber : selectedClassType === 'both' ? styles.streamBadgePurple : styles.streamBadgeBlue}>
-                                <Text style={selectedClassType === 'paper' ? styles.streamBadgeTextAmber : selectedClassType === 'both' ? styles.streamBadgeTextPurple : styles.streamBadgeTextBlue}>
-                                    {selectedClassType === 'paper' ? '📝 Paper Class' : selectedClassType === 'both' ? '⭐ Theory + Paper Combo' : '📘 Theory Class'}
+                            <View style={selectedClassType === 'paper' ? styles.streamBadgeAmber : styles.streamBadgeBlue}>
+                                <Text style={selectedClassType === 'paper' ? styles.streamBadgeTextAmber : styles.streamBadgeTextBlue}>
+                                    {selectedClassType === 'paper' ? '📝 Paper Class' : '📘 Theory Class'}
                                 </Text>
                             </View>
                         </View>
@@ -693,9 +691,9 @@ const CourseDetailsScreen = ({ route, navigation }) => {
                     <View style={styles.animateFade}>
                         {selectedMonthGroup && (
                             <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 15 }}>
-                                <View style={selectedClassType === 'paper' ? styles.streamBadgeAmber : selectedClassType === 'both' ? styles.streamBadgePurple : styles.streamBadgeBlue}>
-                                    <Text style={selectedClassType === 'paper' ? styles.streamBadgeTextAmber : selectedClassType === 'both' ? styles.streamBadgeTextPurple : styles.streamBadgeTextBlue}>
-                                        {selectedClassType === 'paper' ? '📝 Paper Class' : selectedClassType === 'both' ? '⭐ Theory + Paper Combo' : '📘 Theory Class'}
+                                <View style={selectedClassType === 'paper' ? styles.streamBadgeAmber : styles.streamBadgeBlue}>
+                                    <Text style={selectedClassType === 'paper' ? styles.streamBadgeTextAmber : styles.streamBadgeTextBlue}>
+                                        {selectedClassType === 'paper' ? '📝 Paper Class' : '📘 Theory Class'}
                                     </Text>
                                 </View>
                                 <View style={styles.floatingChip}>

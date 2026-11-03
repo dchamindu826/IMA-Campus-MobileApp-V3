@@ -289,10 +289,16 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
         const isLive = isLiveType;
         const isPaper = isPaperType;
 
-        const ytSource = extractYouTubeFromItem(item);
-        const hasYt = !!ytSource;
-        const directCandidate = item.link || item.url || item.videoUrl || item.video_url || item.file;
-        const hasZoom = !hasYt && !!directCandidate;
+        const ytCandidate = item.youtubeLink || item.youtube_link || item.youtubeUrl || item.youtube_url;
+        const ytSource = extractYouTubeFromItem(item) || (ytCandidate ? extractYouTubeFromItem({ link: ytCandidate }) : null);
+        const hasYt = !!ytSource || (!!ytCandidate && (ytCandidate.includes('youtube') || ytCandidate.includes('youtu.be')));
+
+        const zoomCandidate = item.zoomLink || item.zoom_link || item.meetingUrl || 
+            (item.link && !item.link.includes('youtube') && !item.link.includes('youtu.be') ? item.link : null) || 
+            (item.url && !item.url.includes('youtube') && !item.url.includes('youtu.be') ? item.url : null) || 
+            (item.videoUrl && !item.videoUrl.includes('youtube') && !item.videoUrl.includes('youtu.be') ? item.videoUrl : null) || 
+            item.file;
+        const hasZoom = !!zoomCandidate;
 
         return (
             <View key={item.id} style={styles.itemCard}>
@@ -359,7 +365,7 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
                         ) : (
                             /* 🔥 RECORDINGS - YOUTUBE / ZOOM DYNAMIC BUTTONS 🔥 */
                             hasYt && hasZoom ? (
-                                <>
+                                <View style={{ flexDirection: 'row', gap: 8, flex: 1 }}>
                                     <TouchableOpacity
                                         onPress={() => onPlay(item, 'yt')}
                                         style={[styles.playBtn, styles.ytBtn, { flex: 1 }]}
@@ -377,7 +383,7 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
                                         <Icon name="video" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
                                         <Text style={styles.playBtnText}>Zoom</Text>
                                     </TouchableOpacity>
-                                </>
+                                </View>
                             ) : hasYt ? (
                                 <TouchableOpacity
                                     onPress={() => onPlay(item, 'yt')}
@@ -385,7 +391,7 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
                                     activeOpacity={0.8}
                                 >
                                     <Icon name="youtube" size={19} color="#FFFFFF" style={{ marginRight: 8 }} />
-                                    <Text style={styles.playBtnText}>Play Recording</Text>
+                                    <Text style={styles.playBtnText}>Play on YouTube</Text>
                                 </TouchableOpacity>
                             ) : hasZoom ? (
                                 <TouchableOpacity
@@ -394,7 +400,7 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
                                     activeOpacity={0.8}
                                 >
                                     <Icon name="video" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                                    <Text style={styles.playBtnText}>Play Recording</Text>
+                                    <Text style={styles.playBtnText}>Play on Zoom</Text>
                                 </TouchableOpacity>
                             ) : (item.url || item.file) ? (
                                 <TouchableOpacity
@@ -510,10 +516,18 @@ const CourseContentScreen = ({ route, navigation }) => {
 
     // 🔥 PLAYBACK LOGIC (YOUTUBE / ZOOM / OFFLINE) 🔥
     const handlePlayVideo = async (item, forcedType = 'auto') => {
-        const ytSource = extractYouTubeFromItem(item);
-        console.log("[handlePlayVideo]", { forcedType, ytSource, itemTitle: item?.title, itemLink: item?.link, itemYt: item?.youtubeLink });
+        const ytCandidate = item.youtubeLink || item.youtube_link || item.youtubeUrl || item.youtube_url;
+        const ytSource = extractYouTubeFromItem(item) || (ytCandidate ? extractYouTubeFromItem({ link: ytCandidate }) : null);
 
-        if (forcedType === 'yt' || (!forcedType && ytSource) || (forcedType === 'auto' && ytSource) || (ytSource && !item.link)) {
+        const zoomCandidate = item.zoomLink || item.zoom_link || item.meetingUrl || 
+            (item.link && !item.link.includes('youtube') && !item.link.includes('youtu.be') ? item.link : null) || 
+            (item.url && !item.url.includes('youtube') && !item.url.includes('youtu.be') ? item.url : null) || 
+            (item.videoUrl && !item.videoUrl.includes('youtube') && !item.videoUrl.includes('youtu.be') ? item.videoUrl : null) || 
+            item.file;
+
+        console.log("[handlePlayVideo]", { forcedType, ytSource, zoomCandidate, itemTitle: item?.title });
+
+        if (forcedType === 'yt') {
             if (ytSource) {
                 saveToRecent(item);
                 setPlayingItem({ ...item, isYouTube: true, ytId: ytSource.ytId, link: ytSource.link, youtubeLink: ytSource.link });
@@ -522,27 +536,57 @@ const CourseContentScreen = ({ route, navigation }) => {
             }
         }
 
-        let videoLink = item.link || item.url || item.videoUrl || item.video_url || item.file;
+        if (forcedType === 'zoom') {
+            if (zoomCandidate) {
+                saveToRecent(item);
+                const securePath = `${secureStoragePath}/f_${item.id}.mp4`;
+                try {
+                    const fileExists = await RNFS.exists(securePath);
+                    if (fileExists) {
+                        const stat = await RNFS.stat(securePath);
+                        if (stat.size > 2 * 1024 * 1024) {
+                            setPlayingItem({ ...item, link: `file://${securePath}`, isYouTube: false, isOffline: true });
+                            return;
+                        }
+                    }
+                } catch (err) {}
+                setPlayingItem({ ...item, link: zoomCandidate, isYouTube: false, isOffline: false });
+                return;
+            }
+        }
+
+        // Auto fallback
+        if (ytSource && !zoomCandidate) {
+            saveToRecent(item);
+            setPlayingItem({ ...item, isYouTube: true, ytId: ytSource.ytId, link: ytSource.link, youtubeLink: ytSource.link });
+            setYtPlaying(true);
+            return;
+        }
+
+        let videoLink = zoomCandidate || (ytSource ? ytSource.link : null);
         if (!videoLink) return Alert.alert("Error", "Video link is unavailable.");
+
+        if (ytSource && (!zoomCandidate || videoLink.includes('youtube') || videoLink.includes('youtu.be'))) {
+            saveToRecent(item);
+            setPlayingItem({ ...item, isYouTube: true, ytId: ytSource.ytId, link: ytSource.link, youtubeLink: ytSource.link });
+            setYtPlaying(true);
+            return;
+        }
 
         saveToRecent(item);
 
-        // Check if file is downloaded securely in App Internal Storage
         const securePath = `${secureStoragePath}/f_${item.id}.mp4`;
         try {
             const fileExists = await RNFS.exists(securePath);
             if (fileExists) {
                 const stat = await RNFS.stat(securePath);
-                if (stat.size > 2 * 1024 * 1024) { // Valid video file check
+                if (stat.size > 2 * 1024 * 1024) {
                     setPlayingItem({ ...item, link: `file://${securePath}`, isYouTube: false, isOffline: true });
-                    return; // Play offline and exit function
+                    return;
                 }
             }
-        } catch (err) {
-            console.log("Offline playback check error: ", err);
-        }
+        } catch (err) {}
 
-        // Online Zoom or Direct Video Playback
         setPlayingItem({ ...item, link: videoLink, isYouTube: false, isOffline: false });
     };
 

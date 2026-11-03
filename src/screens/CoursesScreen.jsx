@@ -43,21 +43,28 @@ const CoursesScreen = ({ navigation }) => {
   };
 
   // 🔥 FIX: පේළියට දෙකක් වැටෙන්න Card එක පොඩි කළා
-  const renderItem = ({ item }) => (
-    <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => navigation.navigate('CourseDetails', { businessData: item })}>
-      <View style={styles.cardImageContainer}>
-        <Image source={{ uri: `${IMAGE_URL}icons/${item.logo || 'default.png'}` }} style={styles.image} resizeMode="contain" />
-      </View>
-      <View style={styles.cardContent}>
-        {/* Category Badge එක මෙතනින් අයින් කරලා තියෙන්නේ */}
-        <Text style={styles.title} numberOfLines={2}>{item.name}</Text>
-        <View style={styles.footer}>
-          <Text style={styles.enrollText}>Enroll</Text>
-          <Icon name="arrow-right-circle" size={20} color={COLORS.primary} />
+  const renderItem = ({ item }) => {
+    const hasValidLogo = item.logo && item.logo !== 'default.png';
+    const logoUri = hasValidLogo
+      ? `${IMAGE_URL}icons/${item.logo}`
+      : `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'IMA')}&background=DC2626&color=fff&size=200`;
+
+    return (
+      <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => navigation.navigate('CourseDetails', { businessData: item })}>
+        <View style={styles.cardImageContainer}>
+          <Image source={{ uri: logoUri }} style={styles.image} resizeMode="contain" />
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.cardContent}>
+          {/* Category Badge එක මෙතනින් අයින් කරලා තියෙන්නේ */}
+          <Text style={styles.title} numberOfLines={2}>{item.name}</Text>
+          <View style={styles.footer}>
+            <Text style={styles.enrollText}>Enroll</Text>
+            <Icon name="arrow-right-circle" size={20} color={COLORS.primary} />
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.safeArea}>

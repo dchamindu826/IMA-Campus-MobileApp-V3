@@ -110,31 +110,47 @@ const MyCoursesScreen = ({ navigation }) => {
     return finalList;
   }, [batchSubjects, classTypeFilter]);
 
-  const renderBusinessCard = ({ item }) => (
-    <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => { setSelectedBusiness(item); setStep(2); }}>
-      <View style={styles.logoContainer}>
-        <Image source={{ uri: `${IMAGE_URL}icons/${item.logo || 'default.png'}` }} style={styles.logo} resizeMode="contain" />
-      </View>
-      <View style={styles.cardInfo}>
-        <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
-        <Text style={styles.cardSubText}>View Batches</Text>
-      </View>
-      <Icon name="chevron-right" size={24} color="#CCC" />
-    </TouchableOpacity>
-  );
+  const renderBusinessCard = ({ item }) => {
+    const hasValidLogo = item.logo && item.logo !== 'default.png';
+    const logoUri = hasValidLogo
+      ? `${IMAGE_URL}icons/${item.logo}`
+      : `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'IMA')}&background=DC2626&color=fff&size=200`;
 
-  const renderBatchCard = ({ item }) => (
-    <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => { setSelectedBatch(item); setClassTypeFilter('All'); setStep(3); }}>
-      <View style={styles.logoContainer}>
-        <Image source={{ uri: `${IMAGE_URL}icons/${item.logo || 'default.png'}` }} style={styles.logo} resizeMode="contain" />
-      </View>
-      <View style={styles.cardInfo}>
-        <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
-        <Text style={styles.cardSubText}>{item.businessName}</Text>
-      </View>
-      <Icon name="chevron-right" size={24} color="#CCC" />
-    </TouchableOpacity>
-  );
+    return (
+      <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => { setSelectedBusiness(item); setStep(2); }}>
+        <View style={styles.logoContainer}>
+          <Image source={{ uri: logoUri }} style={styles.logo} resizeMode="contain" />
+        </View>
+        <View style={styles.cardInfo}>
+          <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
+          <Text style={styles.cardSubText}>View Batches</Text>
+        </View>
+        <Icon name="chevron-right" size={24} color="#CCC" />
+      </TouchableOpacity>
+    );
+  };
+
+  const renderBatchCard = ({ item }) => {
+    const batchLogo = (item.logo && item.logo !== 'default.png')
+      ? item.logo
+      : (item.businessLogo && item.businessLogo !== 'default.png' ? item.businessLogo : null);
+    const logoUri = batchLogo
+      ? `${IMAGE_URL}icons/${batchLogo}`
+      : `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Batch')}&background=1E3A8A&color=fff&size=200`;
+
+    return (
+      <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => { setSelectedBatch(item); setClassTypeFilter('All'); setStep(3); }}>
+        <View style={styles.logoContainer}>
+          <Image source={{ uri: logoUri }} style={styles.logo} resizeMode="contain" />
+        </View>
+        <View style={styles.cardInfo}>
+          <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
+          <Text style={styles.cardSubText}>{item.businessName}</Text>
+        </View>
+        <Icon name="chevron-right" size={24} color="#CCC" />
+      </TouchableOpacity>
+    );
+  };
 
   const renderSubjectCard = ({ item }) => {
     if (item.isHeader) {
