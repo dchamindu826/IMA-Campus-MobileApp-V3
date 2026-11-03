@@ -45,64 +45,70 @@ if (Platform.OS === 'ios') {
 }
 
 // 🔥 Android Background & Killed App FCM Message Handler
-messaging().setBackgroundMessageHandler(async remoteMessage => {
-  console.log('[Background FCM] Message Received:', remoteMessage);
+if (Platform.OS === 'android') {
+  try {
+    messaging().setBackgroundMessageHandler(async remoteMessage => {
+      console.log('[Background FCM] Message Received:', remoteMessage);
 
-  if (remoteMessage.data?.type === 'INCOMING_CALL') {
-    const callerName = remoteMessage.data.leadName || remoteMessage.data.from || 'Student';
-    const callerPhone = remoteMessage.data.from || '';
-    const biz = remoteMessage.data.businessType || 'IMA Campus';
+      if (remoteMessage.data?.type === 'INCOMING_CALL') {
+        const callerName = remoteMessage.data.leadName || remoteMessage.data.from || 'Student';
+        const callerPhone = remoteMessage.data.from || '';
+        const biz = remoteMessage.data.businessType || 'IMA Campus';
 
-    try {
-      await notifee.createChannel({
-        id: 'calls_channel',
-        name: 'Incoming WhatsApp Calls',
-        importance: AndroidImportance.HIGH,
-        sound: 'default',
-        vibration: true
-      });
+        try {
+          await notifee.createChannel({
+            id: 'calls_channel',
+            name: 'Incoming WhatsApp Calls',
+            importance: AndroidImportance.HIGH,
+            sound: 'default',
+            vibration: true
+          });
 
-      await notifee.displayNotification({
-        title: `📞 WhatsApp Call: ${callerName}`,
-        body: `Incoming call from ${callerPhone} (${biz}). Tap to answer!`,
-        android: {
-          channelId: 'calls_channel',
-          sound: 'default',
-          importance: AndroidImportance.HIGH,
-          category: AndroidCategory.CALL,
-          color: '#25D366',
-          smallIcon: 'ic_launcher',
-          ongoing: true,
-          autoCancel: false,
-          fullScreenAction: {
-            id: 'default',
-            launchActivity: 'default'
-          },
-          pressAction: {
-            id: 'default',
-            launchActivity: 'default'
-          },
-          actions: [
-            {
-              title: 'Decline',
-              pressAction: {
-                id: 'decline_call'
-              }
-            },
-            {
-              title: 'Answer',
-              pressAction: {
-                id: 'answer_call',
+          await notifee.displayNotification({
+            title: `📞 WhatsApp Call: ${callerName}`,
+            body: `Incoming call from ${callerPhone} (${biz}). Tap to answer!`,
+            android: {
+              channelId: 'calls_channel',
+              sound: 'default',
+              importance: AndroidImportance.HIGH,
+              category: AndroidCategory.CALL,
+              color: '#25D366',
+              smallIcon: 'ic_launcher',
+              ongoing: true,
+              autoCancel: false,
+              fullScreenAction: {
+                id: 'default',
                 launchActivity: 'default'
-              }
+              },
+              pressAction: {
+                id: 'default',
+                launchActivity: 'default'
+              },
+              actions: [
+                {
+                  title: 'Decline',
+                  pressAction: {
+                    id: 'decline_call'
+                  }
+                },
+                {
+                  title: 'Answer',
+                  pressAction: {
+                    id: 'answer_call',
+                    launchActivity: 'default'
+                  }
+                }
+              ]
             }
-          ]
+          });
+        } catch (err) {
+          console.log('[Background FCM] Error displaying call notification:', err);
         }
-      });
-    } catch (err) {
-      console.log('[Background FCM] Error displaying call notification:', err);
-    }
+      }
+    });
+  } catch (err) {
+    console.log('[Background FCM] Registration error:', err);
   }
-});
+}
 
 AppRegistry.registerComponent('main', () => App);

@@ -110,10 +110,13 @@ const CourseDetailsScreen = ({ route, navigation }) => {
             else courses = Array.isArray(selectedMonthGroup.courses) ? selectedMonthGroup.courses : Object.values(selectedMonthGroup.courses);
         } catch (e) { }
 
-        const targetType = selectedClassType === 'paper' ? 2 : 1;
+        let targetTypes = [1];
+        if (selectedClassType === 'paper') targetTypes = [2];
+        else if (selectedClassType === 'both') targetTypes = [1, 2, 3];
+
         courses = courses.filter(c => {
             const cType = parseInt(c.courseType || selectedMonthGroup?.classType || 1, 10);
-            return cType === targetType;
+            return targetTypes.includes(cType);
         });
 
         if (isSpecialFlow && activeStream !== 'All') {
@@ -286,9 +289,13 @@ const CourseDetailsScreen = ({ route, navigation }) => {
     };
 
     const proceedToPaymentOrSubjects = (batch, classType) => {
-        const targetType = classType === 'paper' ? 2 : 1;
         const groups = Array.isArray(batch?.groups) ? batch.groups : Object.values(batch?.groups || {});
-        const availableGroups = groups.filter(g => parseInt(g.classType || 1, 10) === targetType);
+        let availableGroups = groups;
+        if (classType === 'paper') {
+            availableGroups = groups.filter(g => parseInt(g.classType || 1, 10) === 2);
+        } else if (classType === 'theory') {
+            availableGroups = groups.filter(g => parseInt(g.classType || 1, 10) === 1);
+        }
         const hasMonthly = availableGroups.some(g => g.type === 1);
         const hasFull = availableGroups.some(g => g.type !== 1);
 
@@ -539,22 +546,58 @@ const CourseDetailsScreen = ({ route, navigation }) => {
                                     <Icon name="chevron-right" size={26} color="rgba(255,255,255,0.7)" />
                                 </LinearGradient>
                             </TouchableOpacity>
+
+                            {/* BOTH (THEORY + PAPER) COMBO CARD */}
+                            <TouchableOpacity 
+                                activeOpacity={0.88} 
+                                onPress={() => {
+                                    setSelectedClassType('both');
+                                    proceedToPaymentOrSubjects(selectedBatch, 'both');
+                                }}
+                                style={{ marginTop: 16 }}
+                            >
+                                <LinearGradient 
+                                    colors={['#4C1D95', '#6D28D9', '#7C3AED']} 
+                                    start={{x:0, y:0}} 
+                                    end={{x:1, y:1}} 
+                                    style={styles.classStreamCard}
+                                >
+                                    <View style={styles.classStreamIconWrapPurple}>
+                                        <Icon name="layers-triple" size={36} color="#DDD6FE" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 14 }}>
+                                        <View style={styles.streamBadgePurple}>
+                                            <Text style={styles.streamBadgeTextPurple}>⭐ {counts.theoryCount + counts.paperCount} Subjects Combo</Text>
+                                        </View>
+                                        <Text style={styles.classStreamTitle}>Theory + Paper (Both)</Text>
+                                        <Text style={styles.classStreamSub}>Complete Master Package & Past Papers</Text>
+                                        <Text style={styles.classStreamDesc} numberOfLines={2}>
+                                            Access both comprehensive Theory lectures and all Model / Past Paper exam sessions with maximum combo discounts!
+                                        </Text>
+                                    </View>
+                                    <Icon name="chevron-right" size={26} color="rgba(255,255,255,0.7)" />
+                                </LinearGradient>
+                            </TouchableOpacity>
                         </View>
                     );
                 })()}
 
                 {step === 3 && (() => {
-                    const targetType = selectedClassType === 'paper' ? 2 : 1;
-                    const streamGroups = safeGroups.filter(g => parseInt(g.classType || 1, 10) === targetType);
+                    let streamGroups = safeGroups;
+                    if (selectedClassType === 'paper') {
+                        streamGroups = safeGroups.filter(g => parseInt(g.classType || 1, 10) === 2);
+                    } else if (selectedClassType === 'theory') {
+                        streamGroups = safeGroups.filter(g => parseInt(g.classType || 1, 10) === 1);
+                    }
                     const hasFullPayment = streamGroups.some(g => g.type == 2 || String(g.name).toLowerCase().includes('full'));
                     const hasMonthlyPayment = streamGroups.some(g => g.type == 1);
                     
                     return (
                     <View style={styles.animateFade}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                            <View style={selectedClassType === 'paper' ? styles.streamBadgeAmber : styles.streamBadgeBlue}>
-                                <Text style={selectedClassType === 'paper' ? styles.streamBadgeTextAmber : styles.streamBadgeTextBlue}>
-                                    {selectedClassType === 'paper' ? '📝 Paper Class' : '📘 Theory Class'}
+                            <View style={selectedClassType === 'paper' ? styles.streamBadgeAmber : selectedClassType === 'both' ? styles.streamBadgePurple : styles.streamBadgeBlue}>
+                                <Text style={selectedClassType === 'paper' ? styles.streamBadgeTextAmber : selectedClassType === 'both' ? styles.streamBadgeTextPurple : styles.streamBadgeTextBlue}>
+                                    {selectedClassType === 'paper' ? '📝 Paper Class' : selectedClassType === 'both' ? '⭐ Theory + Paper Combo' : '📘 Theory Class'}
                                 </Text>
                             </View>
                         </View>
@@ -626,9 +669,8 @@ const CourseDetailsScreen = ({ route, navigation }) => {
                 })()}
 
                 {step === 4 && (() => {
-                    const targetType = selectedClassType === 'paper' ? 2 : 1;
                     const displayGroups = safeGroups.filter(g => {
-                        const matchesClass = parseInt(g.classType || 1, 10) === targetType;
+                        const matchesClass = selectedClassType === 'both' ? true : parseInt(g.classType || 1, 10) === (selectedClassType === 'paper' ? 2 : 1);
                         const matchesPlan = selectedPlan === 'monthly' ? g.type == 1 : g.type != 1;
                         return matchesClass && matchesPlan;
                     });
@@ -651,9 +693,9 @@ const CourseDetailsScreen = ({ route, navigation }) => {
                     <View style={styles.animateFade}>
                         {selectedMonthGroup && (
                             <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 15 }}>
-                                <View style={selectedClassType === 'paper' ? styles.streamBadgeAmber : styles.streamBadgeBlue}>
-                                    <Text style={selectedClassType === 'paper' ? styles.streamBadgeTextAmber : styles.streamBadgeTextBlue}>
-                                        {selectedClassType === 'paper' ? '📝 Paper Class' : '📘 Theory Class'}
+                                <View style={selectedClassType === 'paper' ? styles.streamBadgeAmber : selectedClassType === 'both' ? styles.streamBadgePurple : styles.streamBadgeBlue}>
+                                    <Text style={selectedClassType === 'paper' ? styles.streamBadgeTextAmber : selectedClassType === 'both' ? styles.streamBadgeTextPurple : styles.streamBadgeTextBlue}>
+                                        {selectedClassType === 'paper' ? '📝 Paper Class' : selectedClassType === 'both' ? '⭐ Theory + Paper Combo' : '📘 Theory Class'}
                                     </Text>
                                 </View>
                                 <View style={styles.floatingChip}>
@@ -938,10 +980,13 @@ const styles = StyleSheet.create({
     classStreamCard: { borderRadius: 24, padding: 20, flexDirection: 'row', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
     classStreamIconWrapBlue: { width: 64, height: 64, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
     classStreamIconWrapAmber: { width: 64, height: 64, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
+    classStreamIconWrapPurple: { width: 64, height: 64, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
     streamBadgeBlue: { backgroundColor: 'rgba(59, 130, 246, 0.25)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: 'rgba(147, 197, 253, 0.4)' },
     streamBadgeAmber: { backgroundColor: 'rgba(245, 158, 11, 0.25)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: 'rgba(253, 230, 138, 0.4)' },
+    streamBadgePurple: { backgroundColor: 'rgba(168, 85, 247, 0.35)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: 'rgba(216, 180, 254, 0.5)' },
     streamBadgeTextBlue: { color: '#DBEAFE', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 },
     streamBadgeTextAmber: { color: '#FEF3C7', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 },
+    streamBadgeTextPurple: { color: '#F3E8FF', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 },
     classStreamTitle: { color: 'white', fontSize: 20, fontWeight: '900', marginBottom: 2 },
     classStreamSub: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '700', marginBottom: 4 },
     classStreamDesc: { color: 'rgba(255,255,255,0.7)', fontSize: 11, lineHeight: 15, fontWeight: '500' },

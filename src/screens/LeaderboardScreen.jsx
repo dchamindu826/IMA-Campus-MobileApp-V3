@@ -401,7 +401,7 @@ export default function LeaderboardScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0f1d" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       {/* Screen Header */}
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
@@ -410,7 +410,7 @@ export default function LeaderboardScreen({ navigation }) {
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}
         >
-          <Ionicons name="chevron-back" size={24} color="#ffffff" />
+          <Ionicons name="chevron-back" size={24} color="#0F172A" />
         </TouchableOpacity>
         <View style={styles.headerTitleBox}>
           <Text style={styles.headerTitle}>Leaderboard & Analytics</Text>
@@ -421,7 +421,7 @@ export default function LeaderboardScreen({ navigation }) {
           onPress={onRefresh}
           activeOpacity={0.7}
         >
-          <Ionicons name="refresh-outline" size={20} color="#94a3b8" />
+          <Ionicons name="refresh-outline" size={20} color="#64748B" />
         </TouchableOpacity>
       </View>
 
@@ -551,7 +551,7 @@ export default function LeaderboardScreen({ navigation }) {
                           {first && !second && !third ? (
                             <View style={styles.singleChampionCard}>
                               <LinearGradient
-                                colors={['rgba(245, 158, 11, 0.15)', 'rgba(30, 41, 59, 0.6)']}
+                                colors={['#FEF3C7', '#FFFBEB']}
                                 style={styles.singleChampionGradient}
                               >
                                 <View style={styles.championHeaderBadgeRow}>
@@ -668,7 +668,7 @@ export default function LeaderboardScreen({ navigation }) {
                                 </View>
                                 {first ? (
                                   <View style={styles.podiumDetails}>
-                                    <Text style={[styles.podiumStudentName, { fontWeight: '900', color: '#ffffff', fontSize: 12 }]} numberOfLines={1}>
+                                    <Text style={[styles.podiumStudentName, { fontWeight: '900', color: '#0F172A', fontSize: 12 }]} numberOfLines={1}>
                                       {first.student?.name || `${first.student?.firstName || ''} ${first.student?.lastName || ''}`.trim()}
                                     </Text>
                                     <Text style={styles.podiumScoreGold}>{first.score ?? 0} pts</Text>
@@ -1172,86 +1172,92 @@ export default function LeaderboardScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0f1d'
+    backgroundColor: "#F8FAFC"
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-    backgroundColor: 'rgba(10, 15, 29, 0.95)'
+    borderBottomColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3
   },
   backButton: {
     padding: 8,
     borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)'
+    backgroundColor: "#F1F5F9"
   },
   headerTitleBox: {
     flex: 1,
     marginLeft: 12
   },
   headerTitle: {
-    color: '#ffffff',
+    color: "#0F172A",
     fontSize: 18,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: 0.3
   },
   headerSubtitle: {
-    color: '#94a3b8',
+    color: "#64748B",
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
     marginTop: 1
   },
   refreshButton: {
     padding: 8,
     borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)'
+    backgroundColor: "#F1F5F9"
   },
   topSegmentContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#131b2e',
+    flexDirection: "row",
+    backgroundColor: "#F1F5F9",
     marginHorizontal: 16,
     marginVertical: 12,
     borderRadius: 14,
     padding: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)'
+    borderColor: "#E2E8F0"
   },
   segmentTab: {
     flex: 1,
     borderRadius: 10,
-    overflow: 'hidden'
+    overflow: "hidden"
   },
   segmentTabActive: {
-    elevation: 3
+    elevation: 2,
+    backgroundColor: "#FFFFFF"
   },
   segmentGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 10
   },
   segmentText: {
-    color: '#94a3b8',
+    color: "#64748B",
     fontSize: 13,
-    fontWeight: '800'
+    fontWeight: "800"
   },
   segmentTextActive: {
-    color: '#ffffff'
+    color: "#FFFFFF"
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center'
+    justifyContent: "center",
+    alignItems: "center"
   },
   loadingText: {
-    color: '#94a3b8',
+    color: "#64748B",
     fontSize: 13,
     marginTop: 12,
-    fontWeight: '600'
+    fontWeight: "600"
   },
   scrollContainer: {
     flex: 1,
@@ -1264,17 +1270,22 @@ const styles = StyleSheet.create({
     paddingBottom: 20
   },
   subjectCard: {
-    backgroundColor: '#131b2e',
+    backgroundColor: "#FFFFFF",
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)'
+    borderColor: "#E2E8F0",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6
   },
   subjectHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    borderBottomColor: "#F1F5F9",
     paddingBottom: 12,
     marginBottom: 14
   },
@@ -1282,792 +1293,745 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#FEF3C7",
+    justifyContent: "center",
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)'
+    borderColor: "#FDE68A"
   },
   subjectNameText: {
-    color: '#ffffff',
+    color: "#0F172A",
     fontSize: 17,
-    fontWeight: '900'
+    fontWeight: "900"
   },
   subjectTestsCountText: {
-    color: '#94a3b8',
+    color: "#64748B",
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
     marginTop: 2
   },
   paperTileBox: {
-    backgroundColor: '#0f172a',
+    backgroundColor: "#F8FAFC",
     borderRadius: 16,
     padding: 14,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)'
+    borderColor: "#E2E8F0"
   },
   paperInfoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 14
   },
   paperTypeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 6
   },
   paperTitleText: {
-    color: '#ffffff',
+    color: "#0F172A",
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: "800",
     lineHeight: 20
   },
   participantCountBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E0F2FE",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.3)'
+    borderColor: "#BAE6FD"
   },
   participantCountText: {
-    color: '#38bdf8',
+    color: "#0284C7",
     fontSize: 11,
-    fontWeight: '800'
+    fontWeight: "800"
   },
 
   // 🏆 SINGLE CHAMPION SPOTLIGHT STYLES
   singleChampionCard: {
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1.5,
-    borderColor: 'rgba(245, 158, 11, 0.4)',
+    borderColor: "#FDE68A",
     marginBottom: 14,
-    backgroundColor: '#0f172a',
+    backgroundColor: "#FFFBEB"
   },
   singleChampionGradient: {
-    padding: 16,
+    padding: 16
   },
   championHeaderBadgeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14
   },
   championTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(245, 158, 11, 0.18)',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEF3C7",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.4)',
+    borderColor: "#FCD34D"
   },
   championTagText: {
-    color: '#fbbf24',
+    color: "#B45309",
     fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+    fontWeight: "900",
+    letterSpacing: 0.5
   },
   scorePillGold: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEF3C7",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.35)',
+    borderColor: "#FCD34D"
   },
   scorePillGoldText: {
-    color: '#fbbf24',
+    color: "#B45309",
     fontSize: 12,
-    fontWeight: '900',
+    fontWeight: "900"
   },
   championBodyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14
   },
   championAvatarWrapper: {
-    position: 'relative',
-    marginRight: 14,
+    position: "relative",
+    marginRight: 14
   },
   crownFloatingBadge: {
-    position: 'absolute',
+    position: "absolute",
     bottom: -6,
     right: -6,
-    backgroundColor: '#0f172a',
+    backgroundColor: "#FFFFFF",
     borderRadius: 12,
     padding: 2,
     borderWidth: 1.5,
-    borderColor: '#f59e0b',
+    borderColor: "#F59E0B"
   },
   championInfoCol: {
-    flex: 1,
+    flex: 1
   },
   championStudentName: {
-    color: '#ffffff',
+    color: "#0F172A",
     fontSize: 16.5,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: 0.2,
     lineHeight: 21,
-    marginBottom: 4,
+    marginBottom: 4
   },
   championSubDetailsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8
   },
   cityPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F1F5F9",
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 6
   },
   cityPillText: {
-    color: '#94a3b8',
+    color: "#64748B",
     fontSize: 11,
-    fontWeight: '600',
-    marginLeft: 3,
+    fontWeight: "600",
+    marginLeft: 3
   },
   submissionStatusText: {
-    color: '#38bdf8',
+    color: "#0284C7",
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700"
   },
   challengerCalloutBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEF3C7",
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.2)',
+    borderColor: "#FDE68A"
   },
   challengerCalloutText: {
-    color: '#fde68a',
+    color: "#92400E",
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
     flex: 1,
-    lineHeight: 16,
+    lineHeight: 16
   },
 
   // 🏆 3-TIER OLYMPIC PODIUM STYLES
   podiumWrapper: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    backgroundColor: "#F8FAFC",
     borderRadius: 18,
     padding: 14,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: "#E2E8F0"
   },
   podiumColSilver: {
     flex: 1,
-    alignItems: 'center',
-    paddingBottom: 4,
+    alignItems: "center",
+    paddingBottom: 4
   },
   podiumColGold: {
     flex: 1.2,
-    alignItems: 'center',
-    paddingBottom: 12,
+    alignItems: "center",
+    paddingBottom: 12
   },
   podiumColBronze: {
     flex: 1,
-    alignItems: 'center',
-    paddingBottom: 2,
+    alignItems: "center",
+    paddingBottom: 2
   },
   podiumRankCrownGold: {
-    alignItems: 'center',
-    marginBottom: 6,
+    alignItems: "center",
+    marginBottom: 6
   },
   podiumRankCrownSilver: {
-    alignItems: 'center',
-    marginBottom: 6,
+    alignItems: "center",
+    marginBottom: 6
   },
   podiumRankCrownBronze: {
-    alignItems: 'center',
-    marginBottom: 6,
+    alignItems: "center",
+    marginBottom: 6
   },
   medalEmoji: {
     fontSize: 18,
-    marginBottom: 2,
+    marginBottom: 2
   },
   podiumRankNumberGold: {
-    color: '#fbbf24',
+    color: "#D97706",
     fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.8,
+    fontWeight: "900",
+    letterSpacing: 0.8
   },
   podiumRankNumberSilver: {
-    color: '#cbd5e1',
+    color: "#64748B",
     fontSize: 9,
-    fontWeight: '800',
+    fontWeight: "800"
   },
   podiumRankNumberBronze: {
-    color: '#f97316',
+    color: "#EA580C",
     fontSize: 9,
-    fontWeight: '800',
+    fontWeight: "800"
   },
   podiumAvatarContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center"
   },
   emptyPodiumCircle: {
     width: 52,
     height: 52,
     borderRadius: 26,
     borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: '#475569',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderStyle: "dashed",
+    borderColor: "#CBD5E1",
+    backgroundColor: "#F1F5F9",
+    justifyContent: "center",
+    alignItems: "center"
   },
   emptyPodiumCircleGold: {
     width: 66,
     height: 66,
     borderRadius: 33,
     borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: 'rgba(245, 158, 11, 0.4)',
-    backgroundColor: 'rgba(245, 158, 11, 0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderStyle: "dashed",
+    borderColor: "#FCD34D",
+    backgroundColor: "#FFFBEB",
+    justifyContent: "center",
+    alignItems: "center"
   },
   podiumDetails: {
-    alignItems: 'center',
-    marginTop: 6,
-    width: '100%',
+    alignItems: "center",
+    marginTop: 8
   },
   podiumStudentName: {
-    color: '#e2e8f0',
+    color: "#0F172A",
     fontSize: 11,
-    fontWeight: '700',
-    textAlign: 'center',
-    paddingHorizontal: 4,
+    fontWeight: "800",
+    textAlign: "center",
+    maxWidth: 90
   },
   podiumScoreGold: {
-    color: '#fbbf24',
-    fontSize: 13,
-    fontWeight: '900',
-    marginTop: 2,
+    color: "#D97706",
+    fontSize: 12,
+    fontWeight: "900",
+    marginTop: 2
   },
   podiumScoreSilver: {
-    color: '#e2e8f0',
+    color: "#64748B",
     fontSize: 11,
-    fontWeight: '800',
-    marginTop: 2,
+    fontWeight: "800",
+    marginTop: 2
   },
   podiumScoreBronze: {
-    color: '#f97316',
+    color: "#EA580C",
     fontSize: 11,
-    fontWeight: '800',
-    marginTop: 2,
+    fontWeight: "800",
+    marginTop: 2
   },
   podiumEmptyText: {
-    color: '#64748b',
+    color: "#94A3B8",
     fontSize: 10,
-    fontStyle: 'italic',
-    marginTop: 6,
+    fontWeight: "600",
+    marginTop: 6
   },
 
   // 📋 RANKINGS LIST STYLES
   rankingsContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+    paddingTop: 12
   },
   rankingsHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10
   },
   rankingsHeaderTitle: {
-    color: '#e2e8f0',
+    color: "#0F172A",
     fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    fontWeight: "800"
   },
   expandRankingsText: {
-    color: '#38bdf8',
+    color: "#D97706",
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "800"
   },
   rankingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#131b2e',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    padding: 10,
     borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    marginBottom: 6,
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.04)',
+    borderColor: "#E2E8F0"
   },
   rankingRowMe: {
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    borderColor: 'rgba(245, 158, 11, 0.4)',
+    backgroundColor: "#FEF3C7",
+    borderColor: "#F59E0B"
   },
   rankPill: {
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 26,
     borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 10
   },
   rankPillGold: {
-    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    backgroundColor: "#FEF3C7"
   },
   rankPillSilver: {
-    backgroundColor: 'rgba(203, 213, 225, 0.15)',
+    backgroundColor: "#F1F5F9"
   },
   rankPillBronze: {
-    backgroundColor: 'rgba(249, 115, 22, 0.2)',
+    backgroundColor: "#FFEDD5"
   },
   rankPillNormal: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: "#F1F5F9"
   },
   rankPillText: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: "800"
   },
   rankingStudentName: {
-    color: '#ffffff',
+    color: "#0F172A",
     fontSize: 13,
-    fontWeight: '800',
-  },
-  youMiniBadge: {
-    backgroundColor: '#f59e0b',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 4,
-    marginLeft: 6,
-  },
-  youMiniBadgeText: {
-    color: '#0f172a',
-    fontSize: 8,
-    fontWeight: '900',
+    fontWeight: "800"
   },
   rankingCityText: {
-    color: '#94a3b8',
-    fontSize: 10.5,
-    fontWeight: '500',
-    marginTop: 1,
+    color: "#64748B",
+    fontSize: 10,
+    fontWeight: "600",
+    marginTop: 2
   },
   rankingScoreBox: {
-    alignItems: 'flex-end',
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    alignItems: "flex-end",
+    marginLeft: 8
   },
   rankingScoreText: {
-    color: '#10b981',
-    fontSize: 13,
-    fontWeight: '900',
+    color: "#0F172A",
+    fontSize: 14,
+    fontWeight: "900"
   },
   rankingScoreSub: {
-    color: '#6ee7b7',
+    color: "#64748B",
     fontSize: 8,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    fontWeight: "700"
+  },
+  youMiniBadge: {
+    backgroundColor: "#D97706",
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    marginLeft: 6
+  },
+  youMiniBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 8,
+    fontWeight: "900"
   },
 
-  // CURRENT STUDENT BOTTOM STANDING CARD (REDESIGNED & UNCLUTTERED)
+  // 👤 CURRENT STUDENT STANDING CARD
   myStandingCardContainer: {
-    backgroundColor: '#131b2e',
-    borderRadius: 14,
-    padding: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 10,
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.35)',
-    marginBottom: 10,
+    borderColor: "#E2E8F0",
+    elevation: 1
   },
   myStandingHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center"
   },
   myStandingAvatarWrapper: {
-    position: 'relative',
-    marginRight: 10,
-  },
-  myAvatarImage: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1.5,
-    borderColor: '#f59e0b',
-    backgroundColor: '#334155',
-  },
-  myAvatarFallback: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1.5,
-    borderColor: '#f59e0b',
-    backgroundColor: 'rgba(245, 158, 11, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    position: "relative",
+    marginRight: 12
   },
   myStandingRankMiniBadge: {
-    position: 'absolute',
-    bottom: -3,
-    right: -3,
-    backgroundColor: '#d97706',
+    position: "absolute",
+    bottom: -4,
+    right: -4,
+    backgroundColor: "#D97706",
+    borderRadius: 8,
     paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#0f172a',
+    paddingVertical: 1
   },
   myStandingRankMiniText: {
-    color: '#ffffff',
-    fontSize: 9,
-    fontWeight: '900',
+    color: "#FFFFFF",
+    fontSize: 8,
+    fontWeight: "900"
   },
   myStandingNameBlock: {
-    flex: 1,
-    justifyContent: 'center',
-    marginRight: 8,
+    flex: 1
   },
   myStandingNameTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 2
   },
   myStandingNameText: {
-    color: '#ffffff',
-    fontSize: 13.5,
-    fontWeight: '800',
-    flexShrink: 1,
+    color: "#0F172A",
+    fontSize: 14,
+    fontWeight: "900"
   },
   youBadge: {
-    backgroundColor: 'rgba(245, 158, 11, 0.2)',
-    paddingHorizontal: 5,
-    paddingVertical: 1.5,
-    borderRadius: 4,
-    borderWidth: 0.5,
-    borderColor: 'rgba(245, 158, 11, 0.5)',
+    backgroundColor: "#D97706",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    marginLeft: 6
   },
   youBadgeText: {
-    color: '#f59e0b',
+    color: "#FFFFFF",
     fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+    fontWeight: "900"
   },
   myStandingSubInfoText: {
-    color: '#94a3b8',
+    color: "#64748B",
     fontSize: 11,
-    fontWeight: '500',
-    marginTop: 2,
+    fontWeight: "600"
   },
   myScoreBox: {
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-    minWidth: 68,
+    alignItems: "flex-end"
   },
   myScoreValue: {
-    color: '#34d399',
-    fontSize: 14,
-    fontWeight: '900',
+    color: "#0F172A",
+    fontSize: 18,
+    fontWeight: "900"
   },
   myScoreUnit: {
-    color: '#10b981',
-    fontSize: 7.5,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-    marginTop: 1,
+    color: "#64748B",
+    fontSize: 9,
+    fontWeight: "700"
   },
   myStandingMetaBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
-    paddingTop: 8,
+    flexDirection: "row",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    padding: 10,
     marginTop: 10,
+    justifyContent: "space-around"
   },
   myStandingMetaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: "center"
   },
   myStandingMetaLabel: {
-    color: '#94a3b8',
-    fontSize: 11,
-    fontWeight: '500',
+    color: "#64748B",
+    fontSize: 9,
+    fontWeight: "700"
   },
   myStandingMetaHighlight: {
-    color: '#f59e0b',
-    fontSize: 11.5,
-    fontWeight: '800',
+    color: "#0F172A",
+    fontSize: 13,
+    fontWeight: "900",
+    marginTop: 2
   },
   myStandingMetaSub: {
-    color: '#64748b',
-    fontSize: 11,
-    fontWeight: '500',
+    color: "#94A3B8",
+    fontSize: 9,
+    fontWeight: "600"
   },
   myStandingUnattemptedBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
-    paddingTop: 6,
-    marginTop: 8,
+    borderTopColor: "#F1F5F9"
   },
   myStandingUnattemptedText: {
-    color: '#94a3b8',
+    color: "#64748B",
     fontSize: 11,
-    fontStyle: 'italic',
+    fontWeight: "600",
     flex: 1,
+    marginRight: 10
   },
   takeExamMiniBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#059669',
+    backgroundColor: "#DC2626",
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
+    paddingVertical: 6,
+    borderRadius: 8
   },
   takeExamMiniBtnText: {
-    color: '#ffffff',
-    fontSize: 11.5,
-    fontWeight: '800',
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800"
   },
 
-  // PROGRESS TAB STYLES
+  // 📊 PROGRESS TAB STYLES
   progressSection: {
     gap: 16,
     paddingBottom: 20
   },
   categorySwitcher: {
-    flexDirection: 'row',
-    backgroundColor: '#131b2e',
-    borderRadius: 14,
-    padding: 4,
+    flexDirection: "row",
+    backgroundColor: "#F1F5F9",
+    borderRadius: 12,
+    padding: 3,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)'
+    borderColor: "#E2E8F0"
   },
   categoryTab: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 8,
     borderRadius: 10
   },
   categoryTabActive: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.4)'
+    backgroundColor: "#FFFFFF",
+    elevation: 2
   },
   categoryTabText: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '700'
+    color: "#64748B",
+    fontSize: 11,
+    fontWeight: "800"
   },
   categoryTabTextActive: {
-    color: '#f59e0b'
+    color: "#0F172A"
   },
   categoryCountBadge: {
-    marginLeft: 4,
-    paddingHorizontal: 5,
+    backgroundColor: "#E2E8F0",
+    paddingHorizontal: 6,
     paddingVertical: 1,
-    borderRadius: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)'
+    borderRadius: 8,
+    marginLeft: 5
   },
   categoryCountBadgeActive: {
-    backgroundColor: 'rgba(245, 158, 11, 0.3)'
+    backgroundColor: "#D97706"
   },
   categoryCountText: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontWeight: '800'
+    color: "#0F172A",
+    fontSize: 9,
+    fontWeight: "800"
   },
   kpiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10
   },
   kpiCard: {
     width: (width - 42) / 2,
-    backgroundColor: '#131b2e',
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)'
+    borderColor: "#E2E8F0",
+    elevation: 1
   },
   kpiIconWrapper: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 10
   },
   kpiValue: {
-    color: '#ffffff',
+    color: "#0F172A",
     fontSize: 20,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: 0.5
   },
   kpiLabel: {
-    color: '#94a3b8',
+    color: "#64748B",
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
     marginTop: 2
   },
   chartSection: {
-    backgroundColor: '#131b2e',
+    backgroundColor: "#FFFFFF",
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)'
+    borderColor: "#E2E8F0",
+    elevation: 1
   },
   sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 12
   },
   sectionTitle: {
-    color: '#ffffff',
+    color: "#0F172A",
     fontSize: 15,
-    fontWeight: '800'
+    fontWeight: "800"
   },
   sectionSubtitle: {
-    color: '#94a3b8',
+    color: "#64748B",
     fontSize: 11,
-    fontWeight: '600'
+    fontWeight: "600"
   },
   chartTooltip: {
-    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    backgroundColor: "#0F172A",
     borderRadius: 10,
     padding: 10,
-    borderWidth: 1,
-    borderColor: '#38bdf8',
     marginBottom: 12
   },
   tooltipTitle: {
-    color: '#ffffff',
+    color: "#FFFFFF",
     fontSize: 12,
-    fontWeight: '700'
+    fontWeight: "700"
   },
   tooltipScore: {
-    color: '#38bdf8',
+    color: "#38BDF8",
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: "800",
     marginTop: 2
   },
   chartContainer: {
     height: 140,
-    justifyContent: 'flex-end',
+    justifyContent: "flex-end",
     paddingTop: 10
   },
   barsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-around',
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-around",
     height: 120
   },
   barColumn: {
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1
   },
   barScoreText: {
-    color: '#94a3b8',
+    color: "#64748B",
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: "700",
     marginBottom: 4
   },
   barTrack: {
     width: 14,
     height: 110,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: "#F1F5F9",
     borderRadius: 7,
-    justifyContent: 'flex-end',
-    overflow: 'hidden'
+    justifyContent: "flex-end",
+    overflow: "hidden"
   },
   barFill: {
-    width: '100%',
+    width: "100%",
     borderRadius: 7
   },
   barLabel: {
-    color: '#64748b',
+    color: "#94A3B8",
     fontSize: 9,
-    fontWeight: '600',
+    fontWeight: "600",
     marginTop: 6
   },
   formatFilterRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8
   },
   filterPill: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: '#131b2e',
+    backgroundColor: "#F1F5F9",
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)'
+    borderColor: "#E2E8F0"
   },
   filterPillActive: {
-    backgroundColor: '#f59e0b',
-    borderColor: '#f59e0b'
+    backgroundColor: "#D97706",
+    borderColor: "#D97706"
   },
   filterPillText: {
-    color: '#94a3b8',
+    color: "#64748B",
     fontSize: 11,
-    fontWeight: '700'
+    fontWeight: "700"
   },
   filterPillTextActive: {
-    color: '#000000'
+    color: "#FFFFFF"
   },
   historySection: {
     gap: 10
   },
   testHistoryCard: {
-    backgroundColor: '#131b2e',
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)'
+    borderColor: "#E2E8F0",
+    elevation: 1
   },
   testCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start'
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start"
   },
   testCardTitleBox: {
     flex: 1,
     marginRight: 10
   },
   testBadgesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     marginBottom: 4
   },
@@ -2079,76 +2043,76 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 9,
-    fontWeight: '800'
+    fontWeight: "800"
   },
   testDateText: {
-    color: '#64748b',
+    color: "#94A3B8",
     fontSize: 10,
-    fontWeight: '600'
+    fontWeight: "600"
   },
   testTitle: {
-    color: '#ffffff',
+    color: "#0F172A",
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: "800",
     lineHeight: 18
   },
   scorePill: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: "#DCFCE7",
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)'
+    borderColor: "#86EFAC"
   },
   scorePillValue: {
-    color: '#10b981',
+    color: "#16A34A",
     fontSize: 16,
-    fontWeight: '900'
+    fontWeight: "900"
   },
   scorePillUnit: {
-    color: '#10b981',
+    color: "#16A34A",
     fontSize: 8,
-    fontWeight: '800'
+    fontWeight: "800"
   },
   testCardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginTop: 10,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.05)'
+    borderTopColor: "#F1F5F9"
   },
   rankBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4
   },
   rankText: {
-    color: '#f59e0b',
+    color: "#D97706",
     fontSize: 11,
-    fontWeight: '700'
+    fontWeight: "700"
   },
   breakdownText: {
-    color: '#94a3b8',
+    color: "#64748B",
     fontSize: 10,
-    fontWeight: '600'
+    fontWeight: "600"
   },
   emptyStateBox: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 40
   },
   emptyStateTitle: {
-    color: '#ffffff',
+    color: "#0F172A",
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     marginTop: 12
   },
   emptyStateSubtitle: {
-    color: '#64748b',
+    color: "#64748B",
     fontSize: 12,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 4,
     paddingHorizontal: 20
   }

@@ -15,7 +15,18 @@ const MCQPaperScreen = ({ route, navigation }) => {
     const insets = useSafeAreaInsets();
     const { contentId, courseTitle, paperTitle, thumbnail: initialThumbnail } = route.params || {};
 
-    const [loading, setLoading] = useState(true);
+    const [activeContentId, setActiveContentId] = useState(contentId || null);
+    const [activeCourseTitle, setActiveCourseTitle] = useState(courseTitle || "");
+    const [activePaperTitle, setActivePaperTitle] = useState(paperTitle || "");
+    const [activeThumbnail, setActiveThumbnail] = useState(initialThumbnail || null);
+
+    // Exam Hub States (When opened without contentId)
+    const [hubLoading, setHubLoading] = useState(!contentId);
+    const [hubTab, setHubTab] = useState("AVAILABLE"); // "AVAILABLE" | "HISTORY"
+    const [hubPapers, setHubPapers] = useState([]);
+    const [hubProgress, setHubProgress] = useState(null);
+
+    const [loading, setLoading] = useState(Boolean(contentId));
     const [submitting, setSubmitting] = useState(false);
     const [paperData, setPaperData] = useState(null);
     const [submission, setSubmission] = useState(null);
@@ -33,19 +44,73 @@ const MCQPaperScreen = ({ route, navigation }) => {
 
     const timerIntervalRef = useRef(null);
 
+    const loadHubData = async () => {
+        try {
+            setHubLoading(true);
+            const [progRes, classRes] = await Promise.all([
+                api.get("papers/student/progress").catch(() => ({ data: null })),
+                api.get("mobile/classroom").catch(() => ({ data: [] }))
+            ]);
+
+            setHubProgress(progRes?.data || null);
+            const subjects = classRes?.data || [];
+
+            const modulePromises = subjects.map(s =>
+                api.get(`mobile/module/${s.id}`).then(res => ({ subject: s, data: res.data })).catch(() => null)
+            );
+            const moduleRes = await Promise.all(modulePromises);
+
+            const collected = [];
+            moduleRes.filter(Boolean).forEach(m => {
+                const groups = m.data?.lessonGroups || m.data?.contentGroups || [];
+                const directContents = m.data?.contents || [];
+                const allItems = [...directContents];
+                groups.forEach(g => {
+                    if (Array.isArray(g.contents)) allItems.push(...g.contents);
+                });
+
+                allItems.forEach(item => {
+                    const isPaper = item.type === "paper" || item.type === "exam" || item.paper || String(item.title || "").toLowerCase().includes("paper");
+                    if (isPaper) {
+                        collected.push({
+                            id: item.id,
+                            contentId: item.id,
+                            title: item.title,
+                            courseTitle: m.subject?.name || "Course Subject",
+                            batchName: m.subject?.batchName || "",
+                            paperType: item.paper?.paperType || "MCQ",
+                            durationMinutes: item.paper?.durationMinutes || 60,
+                            totalQuestions: item.paper?.questionsCount || item.paper?.questions?.length || 50,
+                            thumbnail: item.thumbnail
+                        });
+                    }
+                });
+            });
+
+            setHubPapers(collected);
+        } catch (err) {
+            console.log("Error loading exam hub:", err);
+        } finally {
+            setHubLoading(false);
+        }
+    };
+
     useEffect(() => {
-        if (contentId) {
-            loadPaper();
+        if (activeContentId) {
+            loadPaper(activeContentId);
+        } else {
+            loadHubData();
         }
         return () => {
             if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
         };
-    }, [contentId]);
+    }, [activeContentId]);
 
-    const loadPaper = async () => {
+    const loadPaper = async (targetId = activeContentId) => {
+        if (!targetId) return;
         try {
             setLoading(true);
-            const res = await api.get(`papers/content/${contentId}`);
+            const res = await api.get(`papers/content/${targetId}`);
             const data = res.data;
             setPaperData(data);
 
@@ -244,46 +309,240 @@ const MCQPaperScreen = ({ route, navigation }) => {
     const answeredCount = Object.keys(selectedAnswers).filter(k => selectedAnswers[k] !== undefined && selectedAnswers[k] !== null).length;
     const unansweredCount = questions.length - answeredCount;
 
-    if (loading) {
+    if (!activeContentId) {
         return (
-            <View style={[styles.centerContainer, { paddingTop: insets.top }]}>
-                <StatusBar barStyle="light-content" backgroundColor="#0a0f1d" />
-                <ActivityIndicator size="large" color={COLORS.primary} />
-                <Text style={styles.loadingText}>Loading exam details...</Text>
+            <View style={[styles.container, { paddingTop: Math.max(insets.top, 20) + 8, paddingBottom: insets.bottom, backgroundColor: "#F8FAFC" }]}>
+                <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+                {/* HUB TOP HEADER */}
+                <View style={[styles.header, { backgroundColor: "#FFFFFF", borderBottomColor: "#E2E8F0" }]}>
+                    <TouchableOpacity
+                        onPress={() => navigation.goBack()}
+                        style={[styles.headerBackBtn, { backgroundColor: "#F1F5F9" }]}
+                    >
+                        <Icon name="arrow-left" size={22} color="#0F172A" />
+                    </TouchableOpacity>
+
+                    <View style={styles.headerTitleWrap}>
+                        <Text style={[styles.headerSubBadge, { color: COLORS.primary }]}>EXAM HALL & PAST PAPERS</Text>
+                        <Text style={[styles.headerTitle, { color: "#0F172A", fontSize: 17 }]} numberOfLines={1}>
+                            Online Examination Portal
+                        </Text>
+                    </View>
+
+                    <TouchableOpacity
+                        onPress={loadHubData}
+                        style={[styles.headerBackBtn, { backgroundColor: "#F1F5F9", marginRight: 0 }]}
+                    >
+                        <Icon name="refresh" size={20} color="#64748B" />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Dual Tabs: Available vs History */}
+                <View style={hubStyles.tabContainer}>
+                    <TouchableOpacity
+                        style={[hubStyles.tabBtn, hubTab === "AVAILABLE" && hubStyles.tabBtnActive]}
+                        onPress={() => setHubTab("AVAILABLE")}
+                    >
+                        <Icon name="file-document-edit-outline" size={16} color={hubTab === "AVAILABLE" ? "#FFFFFF" : "#64748B"} style={{ marginRight: 6 }} />
+                        <Text style={[hubStyles.tabText, hubTab === "AVAILABLE" && hubStyles.tabTextActive]}>
+                            Active Exams ({hubPapers.length})
+                        </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[hubStyles.tabBtn, hubTab === "HISTORY" && hubStyles.tabBtnActive]}
+                        onPress={() => setHubTab("HISTORY")}
+                    >
+                        <Icon name="history" size={16} color={hubTab === "HISTORY" ? "#FFFFFF" : "#64748B"} style={{ marginRight: 6 }} />
+                        <Text style={[hubStyles.tabText, hubTab === "HISTORY" && hubStyles.tabTextActive]}>
+                            Completed ({(hubProgress?.history || []).length})
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+
+                {hubLoading ? (
+                    <View style={[styles.centerContainer, { backgroundColor: "#F8FAFC" }]}>
+                        <ActivityIndicator size="large" color={COLORS.primary} />
+                        <Text style={[styles.loadingText, { color: "#64748B" }]}>Loading exam hall papers...</Text>
+                    </View>
+                ) : (
+                    <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+                        {/* Overall Stats Cards */}
+                        <View style={hubStyles.statsGrid}>
+                            <View style={hubStyles.statCard}>
+                                <Icon name="clipboard-check-outline" size={22} color="#10B981" />
+                                <Text style={hubStyles.statNum}>{hubProgress?.overall?.totalTaken || 0}</Text>
+                                <Text style={hubStyles.statLabel}>Tests Completed</Text>
+                            </View>
+                            <View style={hubStyles.statCard}>
+                                <Icon name="percent-outline" size={22} color="#3B82F6" />
+                                <Text style={hubStyles.statNum}>{Math.round(hubProgress?.overall?.averageScore || 0)}%</Text>
+                                <Text style={hubStyles.statLabel}>Average Score</Text>
+                            </View>
+                            <View style={hubStyles.statCard}>
+                                <Icon name="trophy-outline" size={22} color="#F59E0B" />
+                                <Text style={hubStyles.statNum}>{hubProgress?.overall?.highestScore || 0}</Text>
+                                <Text style={hubStyles.statLabel}>Top Score</Text>
+                            </View>
+                        </View>
+
+                        {hubTab === "AVAILABLE" ? (
+                            <View>
+                                <Text style={hubStyles.sectionHeader}>Available Practice & Model Papers</Text>
+                                {hubPapers.length === 0 ? (
+                                    <View style={hubStyles.emptyBox}>
+                                        <Icon name="file-search-outline" size={54} color="#CBD5E1" />
+                                        <Text style={hubStyles.emptyTitle}>No Pending Exams</Text>
+                                        <Text style={hubStyles.emptySub}>You have attempted all currently available model papers for your enrolled subjects.</Text>
+                                    </View>
+                                ) : (
+                                    hubPapers.map(paper => (
+                                        <View key={paper.id} style={hubStyles.paperCard}>
+                                            <View style={hubStyles.paperCardHeader}>
+                                                <View style={hubStyles.paperTypePill}>
+                                                    <Text style={hubStyles.paperTypePillText}>{paper.paperType || "MCQ"} PAPER</Text>
+                                                </View>
+                                                <Text style={hubStyles.paperDurationText}>⏱ {paper.durationMinutes || 60} mins</Text>
+                                            </View>
+                                            <Text style={hubStyles.paperTitle}>{paper.title}</Text>
+                                            <Text style={hubStyles.paperSub}>{paper.courseTitle} {paper.batchName ? `• ${paper.batchName}` : ""}</Text>
+
+                                            <View style={hubStyles.paperCardFooter}>
+                                                <View style={hubStyles.badgeRow}>
+                                                    <Icon name="help-circle-outline" size={14} color="#64748B" />
+                                                    <Text style={hubStyles.badgeInfoText}>{paper.totalQuestions} Questions</Text>
+                                                </View>
+
+                                                <TouchableOpacity
+                                                    activeOpacity={0.88}
+                                                    style={hubStyles.startPaperBtn}
+                                                    onPress={() => {
+                                                        setActiveContentId(paper.contentId);
+                                                        setActivePaperTitle(paper.title);
+                                                        setActiveCourseTitle(paper.courseTitle);
+                                                        setActiveThumbnail(paper.thumbnail);
+                                                        loadPaper(paper.contentId);
+                                                    }}
+                                                >
+                                                    <Text style={hubStyles.startPaperBtnText}>Start Exam</Text>
+                                                    <Icon name="arrow-right" size={14} color="#FFFFFF" style={{ marginLeft: 4 }} />
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    ))
+                                )}
+                            </View>
+                        ) : (
+                            <View>
+                                <Text style={hubStyles.sectionHeader}>Past Attempt History & Answers</Text>
+                                {(hubProgress?.history || []).length === 0 ? (
+                                    <View style={hubStyles.emptyBox}>
+                                        <Icon name="history" size={54} color="#CBD5E1" />
+                                        <Text style={hubStyles.emptyTitle}>No Completed Records</Text>
+                                        <Text style={hubStyles.emptySub}>Complete your first exam to review detailed answer breakdowns and rankings.</Text>
+                                    </View>
+                                ) : (
+                                    (hubProgress?.history || []).map((item, idx) => (
+                                        <View key={item.id || idx} style={hubStyles.historyCard}>
+                                            <View style={hubStyles.historyTopRow}>
+                                                <View style={{ flex: 1, marginRight: 10 }}>
+                                                    <Text style={hubStyles.historyTitle}>{item.testTitle || item.title || "Model Paper"}</Text>
+                                                    <Text style={hubStyles.historyDate}>
+                                                        {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString() : "Completed"}
+                                                    </Text>
+                                                </View>
+                                                <View style={hubStyles.historyScoreBox}>
+                                                    <Text style={hubStyles.historyScoreText}>{item.score ?? 0}</Text>
+                                                    <Text style={hubStyles.historyScoreSub}>PTS</Text>
+                                                </View>
+                                            </View>
+
+                                            <View style={hubStyles.historyBottomRow}>
+                                                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                                                    <Icon name="trophy-variant" size={14} color="#F59E0B" style={{ marginRight: 4 }} />
+                                                    <Text style={hubStyles.historyRankText}>
+                                                        Rank #{item.rank || 1} of {item.totalParticipants || 1}
+                                                    </Text>
+                                                </View>
+
+                                                <TouchableOpacity
+                                                    style={hubStyles.reviewBtn}
+                                                    onPress={() => {
+                                                        const targetCId = item.contentId || item.paper?.content?.id || item.paperId;
+                                                        if (targetCId) {
+                                                            setActiveContentId(targetCId);
+                                                            setActivePaperTitle(item.testTitle || item.title);
+                                                            loadPaper(targetCId);
+                                                        }
+                                                    }}
+                                                >
+                                                    <Text style={hubStyles.reviewBtnText}>Review Answers</Text>
+                                                    <Icon name="chevron-right" size={14} color="#4F46E5" />
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    ))
+                                )}
+                            </View>
+                        )}
+                    </ScrollView>
+                )}
             </View>
         );
     }
 
+    if (loading) {
+        return (
+            <View style={[styles.centerContainer, { paddingTop: insets.top, backgroundColor: '#F8FAFC' }]}>
+                <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+                <ActivityIndicator size="large" color={COLORS.primary} />
+                <Text style={[styles.loadingText, { color: '#64748B' }]}>Loading exam details...</Text>
+            </View>
+        );
+    }
+
+    const handleExitExam = () => {
+        const exitAction = () => {
+            if (contentId) {
+                navigation.goBack();
+            } else {
+                setActiveContentId(null);
+                loadHubData();
+            }
+        };
+
+        if (examStatus === 'IN_PROGRESS') {
+            Alert.alert(
+                "Leave Exam?",
+                "Your exam timer is currently running! Are you sure you want to leave?",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Leave", style: "destructive", onPress: exitAction }
+                ]
+            );
+        } else {
+            exitAction();
+        }
+    };
+
     return (
-        <View style={[styles.container, { paddingTop: Math.max(insets.top, 20) + 8, paddingBottom: insets.bottom }]}>
-            <StatusBar barStyle="light-content" backgroundColor="#0a0f1d" />
+        <View style={[styles.container, { paddingTop: Math.max(insets.top, 20) + 8, paddingBottom: insets.bottom, backgroundColor: '#F8FAFC' }]}>
+            <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
             {/* 🌟 TOP HEADER 🌟 */}
-            <View style={styles.header}>
+            <View style={[styles.header, { backgroundColor: '#FFFFFF', borderBottomColor: '#E2E8F0' }]}>
                 <TouchableOpacity
-                    onPress={() => {
-                        if (examStatus === 'IN_PROGRESS') {
-                            Alert.alert(
-                                "Leave Exam?",
-                                "Your exam timer is currently running! Are you sure you want to leave?",
-                                [
-                                    { text: "Cancel", style: "cancel" },
-                                    { text: "Leave", style: "destructive", onPress: () => navigation.goBack() }
-                                ]
-                            );
-                        } else {
-                            navigation.goBack();
-                        }
-                    }}
-                    style={styles.headerBackBtn}
+                    onPress={handleExitExam}
+                    style={[styles.headerBackBtn, { backgroundColor: '#F1F5F9' }]}
                 >
-                    <Icon name="arrow-left" size={22} color="#ffffff" />
+                    <Icon name="arrow-left" size={22} color="#0F172A" />
                 </TouchableOpacity>
 
                 <View style={styles.headerTitleWrap}>
-                    <Text style={styles.headerSubBadge}>MCQ Examination</Text>
-                    <Text style={styles.headerTitle} numberOfLines={1}>
-                        {paperData?.content?.title || paperTitle || "MCQ Paper"}
+                    <Text style={[styles.headerSubBadge, { color: COLORS.primary }]}>MCQ Examination</Text>
+                    <Text style={[styles.headerTitle, { color: '#0F172A' }]} numberOfLines={1}>
+                        {paperData?.content?.title || activePaperTitle || "MCQ Paper"}
                     </Text>
                 </View>
 
@@ -720,7 +979,10 @@ const MCQPaperScreen = ({ route, navigation }) => {
                             }}
                             onPress={() => {
                                 setShowPaletteModal(false);
-                                setShowInstructions(true);
+                                Alert.alert(
+                                    "Exam Instructions",
+                                    paperData?.paper?.instructions || "Read all questions carefully. Answers will automatically submit when time expires."
+                                );
                             }}
                         >
                             <Icon name="information-outline" size={16} color="#f59e0b" />
@@ -790,678 +1052,673 @@ export default MCQPaperScreen;
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0a0f1d'
+        backgroundColor: "#F8FAFC"
     },
     centerContainer: {
         flex: 1,
-        backgroundColor: '#0a0f1d',
-        justifyContent: 'center',
-        alignItems: 'center',
+        backgroundColor: "#F8FAFC",
+        justifyContent: "center",
+        alignItems: "center",
         padding: 20
     },
     loadingText: {
-        color: '#94a3b8',
+        color: "#64748B",
         marginTop: 12,
-        fontSize: 14
+        fontSize: 14,
+        fontWeight: "600"
     },
     header: {
         minHeight: 56,
-        paddingVertical: 6,
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 12,
+        paddingVertical: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: 16,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-        backgroundColor: '#0e1526'
+        borderBottomColor: "#E2E8F0",
+        backgroundColor: "#FFFFFF",
+        elevation: 2
     },
     headerBackBtn: {
-        width: 34,
-        height: 34,
+        width: 36,
+        height: 36,
         borderRadius: 10,
-        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 8
+        backgroundColor: "#F1F5F9",
+        justifyContent: "center",
+        alignItems: "center",
+        marginRight: 10
     },
     headerTitleWrap: {
         flex: 1,
-        justifyContent: 'center',
+        justifyContent: "center",
         marginRight: 6
     },
     headerSubBadge: {
         fontSize: 10,
-        fontWeight: 'bold',
-        color: '#f43f5e',
-        textTransform: 'uppercase',
+        fontWeight: "bold",
+        color: COLORS.primary,
+        textTransform: "uppercase",
         letterSpacing: 0.5
     },
     headerTitle: {
-        fontSize: 13,
-        fontWeight: '800',
-        color: '#ffffff',
-        lineHeight: 17
+        fontSize: 15,
+        fontWeight: "800",
+        color: "#0F172A",
+        lineHeight: 19
     },
     headerRightActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 5
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6
     },
     timerPill: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        flexDirection: "row",
+        alignItems: "center",
         gap: 4,
-        paddingHorizontal: 7,
-        paddingVertical: 4,
+        paddingHorizontal: 9,
+        paddingVertical: 5,
         borderRadius: 12,
-        backgroundColor: 'rgba(16, 185, 129, 0.12)',
+        backgroundColor: "#DCFCE7",
         borderWidth: 1,
-        borderColor: 'rgba(16, 185, 129, 0.3)'
+        borderColor: "#86EFAC"
     },
     timerPillUrgent: {
-        backgroundColor: 'rgba(239, 68, 68, 0.15)',
-        borderColor: 'rgba(239, 68, 68, 0.4)'
+        backgroundColor: "#FEE2E2",
+        borderColor: "#FCA5A5"
     },
     timerText: {
-        fontSize: 11,
-        fontWeight: 'bold',
-        color: '#34d399',
-        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace'
+        fontSize: 12,
+        fontWeight: "900",
+        color: "#16A34A"
     },
     timerTextUrgent: {
-        color: '#f87171'
+        color: "#DC2626"
     },
     paletteToggleBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 3,
-        paddingHorizontal: 7,
-        paddingVertical: 4,
-        borderRadius: 8,
-        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)'
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        backgroundColor: "#4F46E5",
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 12
     },
     paletteToggleText: {
-        color: '#ffffff',
-        fontSize: 10,
-        fontWeight: 'bold'
-    },
-    /* Pre-Start Screen */
-    preStartScroll: {
-        padding: 20,
-        alignItems: 'center'
-    },
-    thumbnailContainer: {
-        width: '100%',
-        aspectRatio: 16 / 9,
-        maxHeight: 220,
-        borderRadius: 18,
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.12)',
-        marginBottom: 18,
-        position: 'relative'
-    },
-    thumbnailImage: {
-        width: '100%',
-        height: '100%'
-    },
-    thumbnailPlaceholder: {
-        width: '100%',
-        height: '100%',
-        justifyContent: 'center',
-        alignItems: 'center'
-    },
-    thumbnailOverlayBadge: {
-        position: 'absolute',
-        top: 12,
-        right: 12,
-        backgroundColor: 'rgba(6, 78, 59, 0.85)',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        borderWidth: 1,
-        borderColor: 'rgba(52, 211, 153, 0.4)'
-    },
-    thumbnailOverlayText: {
-        color: '#34d399',
         fontSize: 11,
-        fontWeight: 'bold'
+        fontWeight: "900",
+        color: "#FFFFFF"
+    },
+    preStartScroll: {
+        padding: 16,
+        paddingBottom: 40
     },
     preStartContent: {
-        width: '100%',
-        alignItems: 'center'
+        backgroundColor: "#FFFFFF",
+        borderRadius: 20,
+        padding: 20,
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        elevation: 2
+    },
+    thumbnailContainer: {
+        width: "100%",
+        height: 180,
+        borderRadius: 14,
+        overflow: "hidden",
+        marginBottom: 16,
+        backgroundColor: "#F1F5F9"
+    },
+    thumbnailImage: {
+        width: "100%",
+        height: "100%"
+    },
+    thumbnailPlaceholder: {
+        width: "100%",
+        height: "100%",
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "#EEF2FF"
+    },
+    thumbnailOverlayBadge: {
+        position: "absolute",
+        bottom: 10,
+        left: 10,
+        backgroundColor: "rgba(15, 23, 42, 0.75)",
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 8
+    },
+    thumbnailOverlayText: {
+        color: "#FFFFFF",
+        fontSize: 10,
+        fontWeight: "800"
     },
     preStartTitle: {
         fontSize: 20,
-        fontWeight: '800',
-        color: '#ffffff',
-        textAlign: 'center',
+        fontWeight: "900",
+        color: "#0F172A",
         marginBottom: 4
     },
     preStartCourse: {
         fontSize: 13,
-        color: '#94a3b8',
-        marginBottom: 16,
-        textAlign: 'center'
-    },
-    instructionBox: {
-        width: '100%',
-        backgroundColor: 'rgba(255, 255, 255, 0.04)',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.08)',
-        borderRadius: 14,
-        padding: 14,
+        fontWeight: "700",
+        color: "#64748B",
         marginBottom: 16
     },
-    instructionHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        marginBottom: 6
-    },
-    instructionHeaderText: {
-        color: '#c7d2fe',
-        fontSize: 13,
-        fontWeight: 'bold'
-    },
-    instructionText: {
-        color: '#94a3b8',
-        fontSize: 12,
-        lineHeight: 18
-    },
     metricsGrid: {
-        flexDirection: 'row',
+        flexDirection: "row",
+        flexWrap: "wrap",
         gap: 10,
-        width: '100%',
-        marginBottom: 24
+        marginBottom: 20
     },
     metricCard: {
-        flex: 1,
-        backgroundColor: 'rgba(255, 255, 255, 0.04)',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.08)',
+        width: (width - 74) / 2,
+        backgroundColor: "#F8FAFC",
         borderRadius: 14,
         padding: 12,
-        alignItems: 'center'
+        borderWidth: 1,
+        borderColor: "#E2E8F0"
     },
     metricLabel: {
-        fontSize: 10,
-        fontWeight: 'bold',
-        color: '#94a3b8',
-        marginTop: 6,
-        textTransform: 'uppercase'
+        color: "#64748B",
+        fontSize: 11,
+        fontWeight: "600"
     },
     metricValue: {
+        color: "#0F172A",
+        fontSize: 16,
+        fontWeight: "900",
+        marginTop: 4
+    },
+    instructionBox: {
+        backgroundColor: "#F8FAFC",
+        borderRadius: 14,
+        padding: 14,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: "#E2E8F0"
+    },
+    instructionHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 8
+    },
+    instructionHeaderText: {
+        color: "#0F172A",
         fontSize: 13,
-        fontWeight: 'bold',
-        color: '#ffffff',
-        marginTop: 2
+        fontWeight: "800"
+    },
+    instructionText: {
+        color: "#475569",
+        fontSize: 12,
+        lineHeight: 18,
+        marginBottom: 6
     },
     startBtn: {
-        width: '100%',
         borderRadius: 14,
-        overflow: 'hidden',
-        elevation: 6
+        overflow: "hidden"
     },
     startBtnGradient: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 16,
-        gap: 8
+        flexDirection: "row",
+        justifyContent: "center",
+        alignItems: "center",
+        paddingVertical: 14,
+        borderRadius: 14
     },
     startBtnText: {
-        color: '#ffffff',
-        fontSize: 15,
-        fontWeight: '900',
-        letterSpacing: 0.5
+        color: "#FFFFFF",
+        fontSize: 14,
+        fontWeight: "900",
+        letterSpacing: 0.5,
+        marginLeft: 8
     },
-    /* Scheduled Countdown View */
     countdownCenterWrap: {
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 24
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 20
     },
     calendarIconCircle: {
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: 'rgba(245, 158, 11, 0.12)',
+        backgroundColor: "#FEF3C7",
+        justifyContent: "center",
+        alignItems: "center",
+        marginBottom: 16,
         borderWidth: 1,
-        borderColor: 'rgba(245, 158, 11, 0.3)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16
+        borderColor: "#FDE68A"
     },
     scheduledBadge: {
-        color: '#fbbf24',
+        color: "#D97706",
         fontSize: 11,
-        fontWeight: 'bold',
-        letterSpacing: 0.5,
-        marginBottom: 8
+        fontWeight: "900",
+        letterSpacing: 1,
+        marginBottom: 6
     },
     scheduledTitle: {
+        color: "#0F172A",
         fontSize: 20,
-        fontWeight: '800',
-        color: '#ffffff',
-        textAlign: 'center',
+        fontWeight: "900",
+        textAlign: "center",
         marginBottom: 6
     },
     scheduledSubtitle: {
-        fontSize: 12,
-        color: '#94a3b8',
-        textAlign: 'center',
-        marginBottom: 24,
-        paddingHorizontal: 20
+        color: "#64748B",
+        fontSize: 13,
+        textAlign: "center",
+        maxWidth: 280,
+        marginBottom: 24
     },
     countdownCard: {
-        width: '100%',
-        backgroundColor: 'rgba(255, 255, 255, 0.04)',
-        borderWidth: 1,
-        borderColor: 'rgba(245, 158, 11, 0.3)',
-        borderRadius: 20,
+        backgroundColor: "#FFFFFF",
+        borderRadius: 18,
         padding: 24,
-        alignItems: 'center'
+        alignItems: "center",
+        width: "100%",
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        elevation: 2
     },
     countdownCardLabel: {
-        color: '#fbbf24',
+        color: "#64748B",
         fontSize: 11,
-        fontWeight: 'bold',
+        fontWeight: "800",
         letterSpacing: 1,
         marginBottom: 8
     },
     countdownValue: {
-        fontSize: 32,
-        fontWeight: '900',
-        color: '#ffffff',
-        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-        marginBottom: 10
+        color: "#4F46E5",
+        fontSize: 28,
+        fontWeight: "900",
+        letterSpacing: 1
     },
     countdownCardNotice: {
-        color: '#64748b',
+        color: "#94A3B8",
         fontSize: 11,
-        textAlign: 'center'
+        textAlign: "center",
+        marginTop: 12
     },
-    /* Exam In-Progress Screen */
     examScroll: {
-        padding: 16,
-        paddingBottom: 24
+        paddingBottom: 30
     },
     questionCard: {
-        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        backgroundColor: "#FFFFFF",
+        borderRadius: 18,
+        padding: 18,
+        marginHorizontal: 16,
+        marginTop: 16,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.08)',
-        borderRadius: 20,
-        padding: 16
+        borderColor: "#E2E8F0",
+        elevation: 2
     },
     qTopBar: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255, 255, 255, 0.06)',
-        paddingBottom: 10,
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
         marginBottom: 14
     },
     qBadge: {
-        backgroundColor: 'rgba(244, 63, 94, 0.15)',
+        backgroundColor: "#EEF2FF",
         paddingHorizontal: 10,
         paddingVertical: 4,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: 'rgba(244, 63, 94, 0.3)'
+        borderRadius: 8
     },
     qBadgeText: {
-        color: '#fb7185',
+        color: "#4F46E5",
         fontSize: 11,
-        fontWeight: 'bold'
+        fontWeight: "800"
     },
     qStatusBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        flexDirection: "row",
+        alignItems: "center",
         gap: 4
     },
     qStatusText: {
-        color: '#94a3b8',
-        fontSize: 11
+        color: "#64748B",
+        fontSize: 11,
+        fontWeight: "700"
     },
     questionText: {
         fontSize: 16,
-        fontWeight: '700',
-        color: '#ffffff',
+        fontWeight: "700",
+        color: "#0F172A",
         lineHeight: 24,
-        marginBottom: 16
+        marginBottom: 14
     },
     qImageBox: {
-        width: '100%',
+        width: "100%",
         height: 200,
-        backgroundColor: '#000000',
         borderRadius: 12,
-        overflow: 'hidden',
-        marginBottom: 16,
-        justifyContent: 'center',
-        alignItems: 'center'
+        overflow: "hidden",
+        marginBottom: 14,
+        backgroundColor: "#F8FAFC"
     },
     qImage: {
-        width: '100%',
-        height: '100%'
+        width: "100%",
+        height: "100%"
     },
     optionsWrap: {
-        gap: 10
+        marginTop: 6
     },
     optionBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 14,
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#F8FAFC",
         borderRadius: 14,
-        backgroundColor: 'rgba(255, 255, 255, 0.03)',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.08)',
-        gap: 12
+        padding: 14,
+        marginBottom: 10,
+        borderWidth: 1.5,
+        borderColor: "#E2E8F0"
     },
     optionBtnSelected: {
-        backgroundColor: 'rgba(244, 63, 94, 0.12)',
-        borderColor: '#f43f5e'
+        backgroundColor: "#EEF2FF",
+        borderColor: "#4F46E5"
     },
     optionNumberCircle: {
-        width: 30,
-        height: 30,
-        borderRadius: 10,
-        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-        justifyContent: 'center',
-        alignItems: 'center'
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: "#F1F5F9",
+        justifyContent: "center",
+        alignItems: "center",
+        marginRight: 12,
+        borderWidth: 1,
+        borderColor: "#CBD5E1"
     },
     optionNumberCircleSelected: {
-        backgroundColor: '#f43f5e'
+        backgroundColor: "#4F46E5",
+        borderColor: "#4F46E5"
     },
     optionNumberText: {
-        color: '#94a3b8',
         fontSize: 13,
-        fontWeight: 'bold'
+        fontWeight: "800",
+        color: "#475569"
     },
     optionText: {
-        flex: 1,
-        color: '#cbd5e1',
         fontSize: 14,
+        fontWeight: "600",
+        color: "#334155",
+        flex: 1,
         lineHeight: 20
     },
     optionTextSelected: {
-        color: '#ffffff',
-        fontWeight: 'bold'
+        color: "#1E1B4B",
+        fontWeight: "800"
+    },
+    emptyWrap: {
+        padding: 40,
+        alignItems: "center"
+    },
+    emptyText: {
+        color: "#94A3B8",
+        fontSize: 13,
+        fontWeight: "600"
     },
     bottomActionBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
         paddingHorizontal: 16,
         paddingVertical: 12,
-        backgroundColor: '#0e1526',
+        backgroundColor: "#FFFFFF",
         borderTopWidth: 1,
-        borderTopColor: 'rgba(255, 255, 255, 0.08)'
+        borderTopColor: "#E2E8F0"
     },
     navBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#F1F5F9",
         paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderRadius: 12,
-        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-        gap: 6
+        paddingVertical: 10,
+        borderRadius: 12
     },
     navBtnDisabled: {
-        opacity: 0.3
+        opacity: 0.4
     },
     navBtnText: {
-        color: '#ffffff',
+        color: "#334155",
         fontSize: 13,
-        fontWeight: 'bold'
+        fontWeight: "700",
+        marginLeft: 4
     },
     nextBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#4F46E5",
         paddingHorizontal: 20,
-        paddingVertical: 12,
-        borderRadius: 12,
-        backgroundColor: '#3b82f6',
-        gap: 6
+        paddingVertical: 10,
+        borderRadius: 12
     },
     nextBtnText: {
-        color: '#ffffff',
+        color: "#FFFFFF",
         fontSize: 13,
-        fontWeight: 'bold'
+        fontWeight: "800",
+        marginRight: 4
     },
     submitExamBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#16A34A",
         paddingHorizontal: 20,
-        paddingVertical: 12,
-        borderRadius: 12,
-        backgroundColor: '#059669',
-        gap: 6
+        paddingVertical: 10,
+        borderRadius: 12
     },
     submitExamBtnText: {
-        color: '#ffffff',
+        color: "#FFFFFF",
         fontSize: 13,
-        fontWeight: '900'
+        fontWeight: "800",
+        marginLeft: 6
     },
-    /* Submitted / Scorecard Section */
     resultScroll: {
-        padding: 16
+        padding: 16,
+        paddingBottom: 50
     },
     scoreBanner: {
-        backgroundColor: 'rgba(255, 255, 255, 0.04)',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.12)',
-        borderRadius: 22,
+        backgroundColor: "#FFFFFF",
+        borderRadius: 20,
         padding: 24,
-        alignItems: 'center',
+        alignItems: "center",
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        elevation: 2,
         marginBottom: 20
     },
     trophyCircle: {
         width: 72,
         height: 72,
         borderRadius: 36,
-        backgroundColor: '#d97706',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 12,
-        borderWidth: 3,
-        borderColor: 'rgba(255, 255, 255, 0.2)'
+        backgroundColor: "#D97706",
+        justifyContent: "center",
+        alignItems: "center",
+        marginBottom: 12
     },
     passFailBadge: {
         paddingHorizontal: 12,
         paddingVertical: 4,
-        borderRadius: 20,
-        marginBottom: 6
+        borderRadius: 8,
+        marginBottom: 10
     },
     passBadge: {
-        backgroundColor: 'rgba(16, 185, 129, 0.2)',
-        borderWidth: 1,
-        borderColor: 'rgba(16, 185, 129, 0.5)'
+        backgroundColor: "#DCFCE7"
     },
     failBadge: {
-        backgroundColor: 'rgba(239, 68, 68, 0.2)',
-        borderWidth: 1,
-        borderColor: 'rgba(239, 68, 68, 0.5)'
+        backgroundColor: "#FEE2E2"
     },
     passFailText: {
         fontSize: 11,
-        fontWeight: '900',
-        color: '#ffffff',
-        letterSpacing: 0.5
+        fontWeight: "900",
+        color: "#16A34A"
     },
     scorePercentage: {
-        fontSize: 44,
-        fontWeight: '900',
-        color: '#ffffff',
-        marginVertical: 4
+        fontSize: 42,
+        fontWeight: "900",
+        color: "#0F172A",
+        marginBottom: 4
     },
     scoreDetail: {
         fontSize: 13,
-        color: '#94a3b8',
-        textAlign: 'center',
-        marginBottom: 16
+        color: "#64748B",
+        textAlign: "center",
+        marginBottom: 18
     },
     resultStatsRow: {
-        flexDirection: 'row',
-        gap: 12,
-        width: '100%',
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255, 255, 255, 0.08)',
-        paddingTop: 14
+        flexDirection: "row",
+        width: "100%",
+        backgroundColor: "#F8FAFC",
+        borderRadius: 14,
+        padding: 12,
+        justifyContent: "space-around"
     },
     resultStatBox: {
-        flex: 1,
-        alignItems: 'center'
+        alignItems: "center"
     },
     statLabel: {
-        fontSize: 11,
-        color: '#94a3b8',
-        marginBottom: 2
+        fontSize: 10,
+        fontWeight: "700",
+        color: "#64748B"
     },
     statValue: {
         fontSize: 16,
-        fontWeight: 'bold',
-        color: '#ffffff'
+        fontWeight: "900",
+        color: "#0F172A",
+        marginTop: 2
     },
     reviewHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 14
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 12
     },
     reviewHeaderText: {
-        color: '#ffffff',
         fontSize: 16,
-        fontWeight: 'bold'
+        fontWeight: "900",
+        color: "#0F172A"
     },
     reviewCard: {
-        backgroundColor: 'rgba(255, 255, 255, 0.03)',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.08)',
+        backgroundColor: "#FFFFFF",
         borderRadius: 16,
-        padding: 14,
-        marginBottom: 14
+        padding: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: "#E2E8F0"
     },
     reviewCardTop: {
-        marginBottom: 6
+        flexDirection: "row",
+        justifyContent: "space-between",
+        marginBottom: 8
     },
     reviewQNum: {
         fontSize: 12,
-        fontWeight: 'bold',
-        color: '#818cf8'
+        fontWeight: "800",
+        color: "#4F46E5"
     },
     reviewQText: {
         fontSize: 14,
-        color: '#ffffff',
-        fontWeight: '600',
+        fontWeight: "700",
+        color: "#0F172A",
+        lineHeight: 20,
         marginBottom: 12
     },
     reviewOptionsList: {
         gap: 8
     },
     reviewOpt: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 10,
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#F8FAFC",
         borderRadius: 10,
-        backgroundColor: 'rgba(255, 255, 255, 0.02)',
+        padding: 10,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.06)',
-        gap: 8
+        borderColor: "#E2E8F0"
     },
     reviewOptCorrect: {
-        backgroundColor: 'rgba(5, 150, 105, 0.15)',
-        borderColor: '#059669'
+        backgroundColor: "#DCFCE7",
+        borderColor: "#86EFAC"
     },
     reviewOptWrong: {
-        backgroundColor: 'rgba(220, 38, 38, 0.15)',
-        borderColor: '#dc2626'
+        backgroundColor: "#FEE2E2",
+        borderColor: "#FCA5A5"
     },
     reviewOptCircle: {
         width: 24,
         height: 24,
-        borderRadius: 8,
-        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-        justifyContent: 'center',
-        alignItems: 'center'
+        borderRadius: 12,
+        backgroundColor: "#E2E8F0",
+        justifyContent: "center",
+        alignItems: "center",
+        marginRight: 8
     },
     reviewOptCircleText: {
-        color: '#94a3b8',
         fontSize: 11,
-        fontWeight: 'bold'
+        fontWeight: "800",
+        color: "#475569"
     },
     reviewOptText: {
-        flex: 1,
-        color: '#94a3b8',
-        fontSize: 12
+        fontSize: 13,
+        fontWeight: "600",
+        color: "#334155",
+        flex: 1
     },
     correctPill: {
-        backgroundColor: 'rgba(5, 150, 105, 0.3)',
-        paddingHorizontal: 8,
+        backgroundColor: "#16A34A",
+        paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 6
     },
     correctPillText: {
-        color: '#34d399',
-        fontSize: 10,
-        fontWeight: 'bold'
+        color: "#FFFFFF",
+        fontSize: 9,
+        fontWeight: "800"
     },
     wrongPill: {
-        backgroundColor: 'rgba(220, 38, 38, 0.3)',
-        paddingHorizontal: 8,
+        backgroundColor: "#DC2626",
+        paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 6
     },
     wrongPillText: {
-        color: '#f87171',
-        fontSize: 10,
-        fontWeight: 'bold'
+        color: "#FFFFFF",
+        fontSize: 9,
+        fontWeight: "800"
     },
-    /* Question Palette Modal */
     modalBackdrop: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-        justifyContent: 'center',
-        alignItems: 'center',
+        backgroundColor: "rgba(0,0,0,0.5)",
+        justifyContent: "center",
+        alignItems: "center",
         padding: 20
     },
     paletteModalCard: {
-        width: '100%',
-        backgroundColor: '#0e1526',
+        backgroundColor: "#FFFFFF",
         borderRadius: 20,
         padding: 20,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.12)'
+        width: "100%",
+        maxHeight: "80%"
     },
     paletteModalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
         marginBottom: 12
     },
     paletteModalTitle: {
-        color: '#ffffff',
         fontSize: 16,
-        fontWeight: 'bold'
+        fontWeight: "900",
+        color: "#0F172A"
     },
     paletteSummaryRow: {
-        flexDirection: 'row',
-        gap: 16,
-        marginBottom: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-        paddingBottom: 10
+        flexDirection: "row",
+        justifyContent: "space-around",
+        backgroundColor: "#F8FAFC",
+        borderRadius: 12,
+        padding: 10,
+        marginBottom: 12
     },
     paletteLegend: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4
     },
     legendDot: {
         width: 10,
@@ -1469,131 +1726,343 @@ const styles = StyleSheet.create({
         borderRadius: 5
     },
     legendText: {
-        color: '#94a3b8',
-        fontSize: 11
+        fontSize: 11,
+        fontWeight: "700",
+        color: "#64748B"
     },
     paletteGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 10,
-        justifyContent: 'flex-start'
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 8,
+        paddingVertical: 10
     },
     paletteItem: {
-        width: (width - 40 - 40 - 40) / 5,
-        height: 42,
+        width: (width - 100) / 5,
+        height: 40,
         borderRadius: 10,
-        backgroundColor: 'rgba(255, 255, 255, 0.06)',
-        justifyContent: 'center',
-        alignItems: 'center',
+        backgroundColor: "#F1F5F9",
+        justifyContent: "center",
+        alignItems: "center",
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.08)'
+        borderColor: "#CBD5E1"
     },
     paletteItemAnswered: {
-        backgroundColor: '#059669',
-        borderColor: '#10b981'
+        backgroundColor: "#DCFCE7",
+        borderColor: "#86EFAC"
     },
     paletteItemCurrent: {
-        borderWidth: 2,
-        borderColor: '#38bdf8'
+        borderColor: "#4F46E5",
+        borderWidth: 2
     },
     paletteItemText: {
-        color: '#94a3b8',
         fontSize: 13,
-        fontWeight: 'bold'
+        fontWeight: "800",
+        color: "#0F172A"
     },
     paletteDoneBtn: {
-        marginTop: 18,
-        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-        paddingVertical: 12,
+        backgroundColor: "#4F46E5",
         borderRadius: 12,
-        alignItems: 'center'
+        paddingVertical: 12,
+        alignItems: "center",
+        marginTop: 10
     },
     paletteDoneBtnText: {
-        color: '#ffffff',
-        fontSize: 12,
-        fontWeight: 'bold',
-        letterSpacing: 0.5
+        color: "#FFFFFF",
+        fontSize: 13,
+        fontWeight: "800"
     },
-    /* Confirm Modal */
     confirmModalCard: {
-        width: '100%',
-        backgroundColor: '#0e1526',
-        borderRadius: 22,
+        backgroundColor: "#FFFFFF",
+        borderRadius: 20,
         padding: 24,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.12)'
+        alignItems: "center",
+        width: "100%"
     },
     confirmIconCircle: {
         width: 64,
         height: 64,
         borderRadius: 32,
-        backgroundColor: '#059669',
-        justifyContent: 'center',
-        alignItems: 'center',
+        backgroundColor: "#4F46E5",
+        justifyContent: "center",
+        alignItems: "center",
         marginBottom: 14
     },
     confirmTitle: {
         fontSize: 18,
-        fontWeight: 'bold',
-        color: '#ffffff',
+        fontWeight: "900",
+        color: "#0F172A",
         marginBottom: 6
     },
     confirmMsg: {
         fontSize: 13,
-        color: '#94a3b8',
-        textAlign: 'center',
-        lineHeight: 18,
-        marginBottom: 16
+        color: "#64748B",
+        textAlign: "center",
+        marginBottom: 16,
+        lineHeight: 18
     },
     confirmStatsBox: {
-        width: '100%',
-        backgroundColor: 'rgba(255, 255, 255, 0.04)',
+        flexDirection: "row",
+        justifyContent: "space-around",
+        width: "100%",
+        backgroundColor: "#F8FAFC",
         borderRadius: 12,
         padding: 12,
-        flexDirection: 'row',
-        justifyContent: 'space-around',
         marginBottom: 20
     },
     confirmStatText: {
         fontSize: 13,
-        color: '#cbd5e1'
+        fontWeight: "700",
+        color: "#0F172A"
     },
     confirmActionsRow: {
-        flexDirection: 'row',
+        flexDirection: "row",
         gap: 12,
-        width: '100%'
+        width: "100%"
     },
     confirmCancelBtn: {
         flex: 1,
-        paddingVertical: 14,
+        backgroundColor: "#F1F5F9",
         borderRadius: 12,
-        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-        alignItems: 'center'
+        paddingVertical: 12,
+        alignItems: "center"
     },
     confirmCancelText: {
-        color: '#cbd5e1',
+        color: "#64748B",
         fontSize: 13,
-        fontWeight: 'bold'
+        fontWeight: "800"
     },
     confirmSubmitBtn: {
         flex: 1,
-        paddingVertical: 14,
+        backgroundColor: "#16A34A",
         borderRadius: 12,
-        backgroundColor: '#059669',
-        alignItems: 'center'
+        paddingVertical: 12,
+        alignItems: "center"
     },
     confirmSubmitText: {
-        color: '#ffffff',
+        color: "#FFFFFF",
         fontSize: 13,
-        fontWeight: 'bold'
+        fontWeight: "800"
+    }
+});
+
+const hubStyles = StyleSheet.create({
+    tabContainer: {
+        flexDirection: "row",
+        backgroundColor: "#F1F5F9",
+        marginHorizontal: 16,
+        marginVertical: 10,
+        borderRadius: 14,
+        padding: 4,
+        borderWidth: 1,
+        borderColor: "#E2E8F0"
     },
-    emptyWrap: {
+    tabBtn: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 9,
+        borderRadius: 10
+    },
+    tabBtnActive: {
+        backgroundColor: "#4F46E5",
+        elevation: 2
+    },
+    tabText: {
+        color: "#64748B",
+        fontSize: 12,
+        fontWeight: "800"
+    },
+    tabTextActive: {
+        color: "#FFFFFF"
+    },
+    statsGrid: {
+        flexDirection: "row",
+        gap: 10,
+        marginBottom: 16
+    },
+    statCard: {
+        flex: 1,
+        backgroundColor: "#FFFFFF",
+        borderRadius: 14,
+        padding: 12,
+        alignItems: "center",
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        elevation: 1
+    },
+    statNum: {
+        color: "#0F172A",
+        fontSize: 18,
+        fontWeight: "900",
+        marginTop: 4
+    },
+    statLabel: {
+        color: "#64748B",
+        fontSize: 10,
+        fontWeight: "700",
+        marginTop: 2
+    },
+    sectionHeader: {
+        color: "#0F172A",
+        fontSize: 15,
+        fontWeight: "900",
+        marginBottom: 12
+    },
+    emptyBox: {
+        backgroundColor: "#FFFFFF",
+        borderRadius: 16,
         padding: 30,
-        alignItems: 'center'
+        alignItems: "center",
+        borderWidth: 1,
+        borderColor: "#E2E8F0"
     },
-    emptyText: {
-        color: '#94a3b8',
-        fontSize: 14
+    emptyTitle: {
+        color: "#0F172A",
+        fontSize: 16,
+        fontWeight: "800",
+        marginTop: 10
+    },
+    emptySub: {
+        color: "#64748B",
+        fontSize: 12,
+        textAlign: "center",
+        marginTop: 4
+    },
+    paperCard: {
+        backgroundColor: "#FFFFFF",
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        elevation: 1
+    },
+    paperCardHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 8
+    },
+    paperTypePill: {
+        backgroundColor: "#EEF2FF",
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6
+    },
+    paperTypePillText: {
+        color: "#4F46E5",
+        fontSize: 9,
+        fontWeight: "900"
+    },
+    paperDurationText: {
+        color: "#64748B",
+        fontSize: 11,
+        fontWeight: "700"
+    },
+    paperTitle: {
+        color: "#0F172A",
+        fontSize: 15,
+        fontWeight: "900",
+        marginBottom: 4
+    },
+    paperSub: {
+        color: "#64748B",
+        fontSize: 11,
+        fontWeight: "600",
+        marginBottom: 12
+    },
+    paperCardFooter: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        borderTopWidth: 1,
+        borderTopColor: "#F1F5F9",
+        paddingTop: 10
+    },
+    badgeRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4
+    },
+    badgeInfoText: {
+        color: "#64748B",
+        fontSize: 11,
+        fontWeight: "700"
+    },
+    startPaperBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#10B981",
+        paddingHorizontal: 14,
+        paddingVertical: 7,
+        borderRadius: 10
+    },
+    startPaperBtnText: {
+        color: "#FFFFFF",
+        fontSize: 11,
+        fontWeight: "800"
+    },
+    historyCard: {
+        backgroundColor: "#FFFFFF",
+        borderRadius: 16,
+        padding: 14,
+        marginBottom: 10,
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        elevation: 1
+    },
+    historyTopRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 8
+    },
+    historyTitle: {
+        color: "#0F172A",
+        fontSize: 14,
+        fontWeight: "800"
+    },
+    historyDate: {
+        color: "#94A3B8",
+        fontSize: 10,
+        fontWeight: "600",
+        marginTop: 2
+    },
+    historyScoreBox: {
+        alignItems: "flex-end"
+    },
+    historyScoreText: {
+        color: "#16A34A",
+        fontSize: 16,
+        fontWeight: "900"
+    },
+    historyScoreSub: {
+        color: "#16A34A",
+        fontSize: 8,
+        fontWeight: "800"
+    },
+    historyBottomRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        borderTopWidth: 1,
+        borderTopColor: "#F1F5F9",
+        paddingTop: 8
+    },
+    historyRankText: {
+        color: "#D97706",
+        fontSize: 11,
+        fontWeight: "700"
+    },
+    reviewBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 2
+    },
+    reviewBtnText: {
+        color: "#4F46E5",
+        fontSize: 11,
+        fontWeight: "800"
     }
 });

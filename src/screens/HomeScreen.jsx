@@ -221,7 +221,7 @@ const HomeScreen = ({ navigation }) => {
     { id: 4, name: 'Lumi Chat', icon: 'headphones', color: '#F0F9FF', iconColor: '#0EA5E9', targetTab: 'SupportChat', desc: 'LUMI Chat Support' },
     { id: 5, name: 'Delivery', icon: 'truck-delivery-outline', color: '#FEF2F2', iconColor: COLORS.primary, targetTab: 'Delivery', desc: 'Track materials' },
     { id: 6, name: 'Leaderboard', icon: 'trophy-variant-outline', color: '#FFFBEB', iconColor: '#D97706', targetTab: 'Leaderboard', desc: 'Rankings & Analytics' },
-    { id: 7, name: 'YT Player', icon: 'youtube', color: '#FEF2F2', iconColor: '#EF4444', targetTab: 'YTPlayerTest', desc: 'Test video player' }
+    { id: 7, name: 'Exams & Papers', icon: 'file-document-edit-outline', color: '#EEF2FF', iconColor: '#4F46E5', targetTab: 'MCQPaper', desc: 'Online Exam Hall' }
   ];
 
   const renderTextWithLinks = (text) => {
@@ -433,6 +433,8 @@ const HomeScreen = ({ navigation }) => {
                   navigation.navigate('Delivery');
                 } else if (item.targetTab === 'Leaderboard') {
                   navigation.navigate('Leaderboard');
+                } else if (item.targetTab === 'MCQPaper') {
+                  navigation.navigate('MCQPaper');
                 } else if (item.targetTab === 'YTPlayerTest') {
                   const nav = navigation.getParent ? (navigation.getParent() || navigation) : navigation;
                   nav.navigate('YTPlayerTest');
@@ -446,6 +448,43 @@ const HomeScreen = ({ navigation }) => {
             />
           ))}
         </View>
+
+        {/* 🔥 Online Exam Hall & Model Papers Banner Widget */}
+        <TouchableOpacity
+          activeOpacity={0.92}
+          onPress={() => navigation.navigate('MCQPaper')}
+          style={styles.examBannerCard}
+        >
+          <LinearGradient
+            colors={['#1E1B4B', '#312E81', '#4338CA']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.examBannerGradient}
+          >
+            <View style={{ flex: 1, paddingRight: 10 }}>
+              <View style={styles.examTagRow}>
+                <View style={styles.examLiveDot} />
+                <Text style={styles.examTagText}>ONLINE EXAM HALL</Text>
+                <View style={styles.examPillBadge}>
+                  <Text style={styles.examPillBadgeText}>MCQ & STRUCTURED</Text>
+                </View>
+              </View>
+              <Text style={styles.examBannerTitle}>Past Papers & Model Exams</Text>
+              <Text style={styles.examBannerDesc}>
+                Practice real timed papers, instant evaluation and compete on the island Leaderboard!
+              </Text>
+              <View style={styles.examBannerBtn}>
+                <Text style={styles.examBannerBtnText}>Enter Exam Hall</Text>
+                <Icon name="arrow-right" size={16} color="#FFFFFF" style={{ marginLeft: 6 }} />
+              </View>
+            </View>
+            <View style={styles.examBannerIconContainer}>
+              <View style={styles.examBannerCircle}>
+                <Icon name="file-document-edit" size={38} color="#A5B4FC" />
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
 
         {enrolledCount > 0 && <UpgradeOfferWidget navigation={navigation} />}
 
@@ -701,7 +740,96 @@ const styles = StyleSheet.create({
   detailTitle: { fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 8 },
   detailTime: { fontSize: 12, color: '#888', marginBottom: 15 },
   detailBody: { fontSize: 15, color: '#444', lineHeight: 22 },
-  backBtn: { marginTop: 30, backgroundColor: COLORS.primary, padding: 12, borderRadius: 10, alignItems: 'center' }
+  backBtn: { marginTop: 30, backgroundColor: COLORS.primary, padding: 12, borderRadius: 10, alignItems: 'center' },
+
+  // 🔥 Exam Banner Widget Styles
+  examBannerCard: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 20,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#4338CA',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  examBannerGradient: {
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+  },
+  examTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  examLiveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
+  examTagText: {
+    color: '#A5B4FC',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  examPillBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  examPillBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  examBannerTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  examBannerDesc: {
+    color: '#E0E7FF',
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 12,
+  },
+  examBannerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#4F46E5',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  examBannerBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  examBannerIconContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  examBannerCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
 });
 
 export default HomeScreen;

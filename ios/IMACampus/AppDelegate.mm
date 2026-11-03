@@ -58,7 +58,7 @@
   if (metroURL) {
     return metroURL;
   }
-  return [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];
+  return [NSURL URLWithString:@"http://192.168.8.187:8081/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&minify=false"];
 #else
   return [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];
 #endif
