@@ -12,7 +12,7 @@ import {
   StatusBar
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import api from '../services/api';
 
 const { width } = Dimensions.get('window');
@@ -85,14 +85,14 @@ export default function StudentProgressScreen({ navigation }) {
           style={styles.backButton} 
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="chevron-back" size={24} color="#ffffff" />
+          <Icon name="arrow-left" size={24} color="#ffffff" />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Test Progress & Analytics</Text>
           <Text style={styles.headerSubtitle}>Official Performance Records</Text>
         </View>
         <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
-          <Ionicons name="refresh-outline" size={20} color="#94a3b8" />
+          <Icon name="refresh" size={20} color="#94a3b8" />
         </TouchableOpacity>
       </View>
 
@@ -116,8 +116,8 @@ export default function StudentProgressScreen({ navigation }) {
                 setSelectedChartBar(null);
               }}
             >
-              <Ionicons 
-                name="flash" 
+              <Icon 
+                name="lightning-bolt" 
                 size={16} 
                 color={activeCategory === 'WEEKLY' ? '#f59e0b' : '#64748b'} 
                 style={{ marginRight: 6 }} 
@@ -137,7 +137,7 @@ export default function StudentProgressScreen({ navigation }) {
                 setSelectedChartBar(null);
               }}
             >
-              <Ionicons 
+              <Icon 
                 name="trophy" 
                 size={16} 
                 color={activeCategory === 'MONTHLY' ? '#f59e0b' : '#64748b'} 
@@ -156,7 +156,7 @@ export default function StudentProgressScreen({ navigation }) {
           <View style={styles.kpiGrid}>
             <View style={styles.kpiCard}>
               <View style={[styles.kpiIconWrapper, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
-                <Ionicons name="speedometer-outline" size={20} color="#f59e0b" />
+                <Icon name="speedometer" size={20} color="#f59e0b" />
               </View>
               <Text style={styles.kpiValue}>{currentSummary.averageScore}%</Text>
               <Text style={styles.kpiLabel}>Average Score</Text>
@@ -164,7 +164,7 @@ export default function StudentProgressScreen({ navigation }) {
 
             <View style={styles.kpiCard}>
               <View style={[styles.kpiIconWrapper, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
-                <Ionicons name="ribbon-outline" size={20} color="#10b981" />
+                <Icon name="medal" size={20} color="#10b981" />
               </View>
               <Text style={[styles.kpiValue, { color: '#10b981' }]}>{currentSummary.highestScore} pts</Text>
               <Text style={styles.kpiLabel}>Highest Score</Text>
@@ -172,7 +172,7 @@ export default function StudentProgressScreen({ navigation }) {
 
             <View style={styles.kpiCard}>
               <View style={[styles.kpiIconWrapper, { backgroundColor: 'rgba(99, 102, 241, 0.15)' }]}>
-                <Ionicons name="document-text-outline" size={20} color="#6366f1" />
+                <Icon name="file-document-outline" size={20} color="#6366f1" />
               </View>
               <Text style={styles.kpiValue}>{currentSummary.totalAttempted}</Text>
               <Text style={styles.kpiLabel}>Completed Tests</Text>
@@ -180,7 +180,7 @@ export default function StudentProgressScreen({ navigation }) {
 
             <View style={styles.kpiCard}>
               <View style={[styles.kpiIconWrapper, { backgroundColor: 'rgba(236, 72, 153, 0.15)' }]}>
-                <Ionicons name="checkmark-done-circle-outline" size={20} color="#ec4899" />
+                <Icon name="check-circle-outline" size={20} color="#ec4899" />
               </View>
               <Text style={[styles.kpiValue, { color: '#ec4899' }]}>{currentSummary.passRate}%</Text>
               <Text style={styles.kpiLabel}>Pass Rate</Text>
@@ -265,7 +265,7 @@ export default function StudentProgressScreen({ navigation }) {
             <Text style={styles.sectionTitle}>Exam History ({testList.length})</Text>
             {testList.length === 0 ? (
               <View style={styles.emptyState}>
-                <Ionicons name="folder-open-outline" size={44} color="#334155" />
+                <Icon name="folder-open-outline" size={44} color="#334155" />
                 <Text style={styles.emptyTitle}>No Completed Tests</Text>
                 <Text style={styles.emptySubtitle}>
                   You haven't completed any {activeCategory.toLowerCase()} tests in this category yet.
@@ -294,7 +294,7 @@ export default function StudentProgressScreen({ navigation }) {
 
                   <View style={styles.testCardFooter}>
                     <View style={styles.rankBox}>
-                      <Ionicons name="podium-outline" size={14} color="#f59e0b" />
+                      <Icon name="podium" size={14} color="#f59e0b" style={{ marginRight: 4 }} />
                       <Text style={styles.rankText}>
                         Rank #{test.rank || '-'} of {test.totalParticipants || '-'} Candidates
                       </Text>

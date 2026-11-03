@@ -327,7 +327,7 @@ const SectionedContentList = ({ tabKey, type, data, contentGroups, onPlay, onSho
                                 style={[styles.takeExamBtn, { flex: 1 }]}
                                 activeOpacity={0.8}
                             >
-                                <Icon name="trophy-award" size={18} color="#ffffff" style={{ marginRight: 6 }} />
+                                <Icon name="trophy" size={18} color="#ffffff" style={{ marginRight: 6 }} />
                                 <Text style={styles.takeExamBtnText}>
                                     {item.paper?.paperType === 'STRUCTURED' ? 'Structured Paper' : (item.paper?.paperType === 'BOTH' ? 'Combined Paper' : 'Exam Paper')}
                                 </Text>

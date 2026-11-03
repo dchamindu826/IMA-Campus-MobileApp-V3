@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity, ScrollView,
     ActivityIndicator, Modal, Alert, Image, StatusBar, Platform, Dimensions, Linking
@@ -11,6 +11,23 @@ import api, { IMAGE_URL } from '../services/api';
 import COLORS from '../constants/colors';
 
 const { width } = Dimensions.get('window');
+
+const isValidImage = (filename) => {
+    if (!filename || typeof filename !== 'string') return false;
+    const clean = filename.trim().toLowerCase();
+    if (clean === '' || clean === 'null' || clean === 'undefined' || clean === 'default.png' || clean === 'none') return false;
+    if (clean.endsWith('.enc') || clean.endsWith('.htm') || clean.endsWith('.html') || clean.endsWith('.php')) return false;
+    return true;
+};
+
+const getFormatBadgeColor = (type) => {
+    switch (type) {
+        case 'MCQ': return '#10B981';
+        case 'STRUCTURED': return '#8B5CF6';
+        case 'BOTH': return '#3B82F6';
+        default: return '#64748B';
+    }
+};
 
 const MCQPaperScreen = ({ route, navigation }) => {
     const insets = useSafeAreaInsets();
@@ -26,6 +43,24 @@ const MCQPaperScreen = ({ route, navigation }) => {
     const [hubTab, setHubTab] = useState("AVAILABLE"); // "AVAILABLE" | "HISTORY"
     const [hubPapers, setHubPapers] = useState([]);
     const [hubProgress, setHubProgress] = useState(null);
+    const [selectedHubBusiness, setSelectedHubBusiness] = useState(null);
+
+    const businessCategories = useMemo(() => {
+        const map = new Map();
+        hubPapers.forEach(paper => {
+            const bKey = (paper.businessName || 'General Studies').trim();
+            if (!map.has(bKey)) {
+                map.set(bKey, {
+                    name: bKey,
+                    logo: paper.businessLogo,
+                    courseTitle: paper.courseTitle,
+                    papers: []
+                });
+            }
+            map.get(bKey).papers.push(paper);
+        });
+        return Array.from(map.values());
+    }, [hubPapers]);
 
     const [loading, setLoading] = useState(Boolean(contentId));
     const [submitting, setSubmitting] = useState(false);
@@ -71,6 +106,9 @@ const MCQPaperScreen = ({ route, navigation }) => {
                     if (Array.isArray(g.contents)) allItems.push(...g.contents);
                 });
 
+                const bName = (m.subject?.businessName || m.subject?.business_name || (m.subject?.name ? m.subject.name.split('-')[0].trim() : 'General Studies')).trim();
+                const bLogo = m.subject?.businessLogo || m.subject?.business_logo || m.subject?.batchLogo || m.subject?.batch_logo;
+
                 allItems.forEach(item => {
                     const isPaper = item.type === "paper" || item.type === "exam" || item.paper || String(item.title || "").toLowerCase().includes("paper");
                     if (isPaper) {
@@ -80,6 +118,8 @@ const MCQPaperScreen = ({ route, navigation }) => {
                             title: item.title,
                             courseTitle: m.subject?.name || "Course Subject",
                             batchName: m.subject?.batchName || "",
+                            businessName: bName,
+                            businessLogo: bLogo,
                             paperType: item.paper?.paperType || "MCQ",
                             durationMinutes: item.paper?.durationMinutes || 60,
                             totalQuestions: item.paper?.questionsCount || item.paper?.questions?.length || 50,
@@ -264,8 +304,8 @@ const MCQPaperScreen = ({ route, navigation }) => {
                 }
             }
         } catch (err) {
-            console.error("Failed to load student paper details:", err);
-            Alert.alert("Error", "Could not load exam details. Please check your internet connection.");
+            console.log("Could not load student paper details:", err?.message || err);
+            Alert.alert("Exam Notice", "Could not load exam details. Please check your connection or contact support.");
         } finally {
             setLoading(false);
         }
@@ -681,48 +721,143 @@ const MCQPaperScreen = ({ route, navigation }) => {
 
                         {hubTab === "AVAILABLE" ? (
                             <View>
-                                <Text style={hubStyles.sectionHeader}>Available Practice & Model Papers</Text>
-                                {hubPapers.length === 0 ? (
-                                    <View style={hubStyles.emptyBox}>
-                                        <Icon name="file-search-outline" size={54} color="#CBD5E1" />
-                                        <Text style={hubStyles.emptyTitle}>No Pending Exams</Text>
-                                        <Text style={hubStyles.emptySub}>You have attempted all currently available model papers for your enrolled subjects.</Text>
-                                    </View>
-                                ) : (
-                                    hubPapers.map(paper => (
-                                        <View key={paper.id} style={hubStyles.paperCard}>
-                                            <View style={hubStyles.paperCardHeader}>
-                                                <View style={hubStyles.paperTypePill}>
-                                                    <Text style={hubStyles.paperTypePillText}>{paper.paperType || "MCQ"} PAPER</Text>
-                                                </View>
-                                                <Text style={hubStyles.paperDurationText}>⏱ {paper.durationMinutes || 60} mins</Text>
+                                {!selectedHubBusiness ? (
+                                    <>
+                                        <View style={hubStyles.categorySectionHeaderRow}>
+                                            <Text style={hubStyles.sectionHeader}>Exam Categories & Subjects</Text>
+                                            <Text style={hubStyles.sectionSub}>Select a subject category to view official ranking tests and model papers</Text>
+                                        </View>
+
+                                        {businessCategories.length === 0 ? (
+                                            <View style={hubStyles.emptyBox}>
+                                                <Icon name="file-search-outline" size={54} color="#CBD5E1" />
+                                                <Text style={hubStyles.emptyTitle}>No Pending Exams</Text>
+                                                <Text style={hubStyles.emptySub}>You have attempted all currently available model papers for your enrolled subjects.</Text>
                                             </View>
-                                            <Text style={hubStyles.paperTitle}>{paper.title}</Text>
-                                            <Text style={hubStyles.paperSub}>{paper.courseTitle} {paper.batchName ? `• ${paper.batchName}` : ""}</Text>
+                                        ) : (
+                                            businessCategories.map((bCategory, bIdx) => {
+                                                const hasValidLogo = isValidImage(bCategory.logo);
+                                                const logoUri = hasValidLogo
+                                                    ? (bCategory.logo.startsWith('http') ? bCategory.logo : `${IMAGE_URL}icons/${bCategory.logo.trim()}`)
+                                                    : `https://ui-avatars.com/api/?name=${encodeURIComponent(bCategory.name || 'IMA')}&background=4F46E5&color=fff&size=200`;
 
-                                            <View style={hubStyles.paperCardFooter}>
-                                                <View style={hubStyles.badgeRow}>
-                                                    <Icon name="help-circle-outline" size={14} color="#64748B" />
-                                                    <Text style={hubStyles.badgeInfoText}>{paper.totalQuestions} Questions</Text>
-                                                </View>
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={bIdx}
+                                                        style={hubStyles.businessCard}
+                                                        activeOpacity={0.85}
+                                                        onPress={() => setSelectedHubBusiness(bCategory.name)}
+                                                    >
+                                                        <View style={hubStyles.businessLogoContainer}>
+                                                            {hasValidLogo ? (
+                                                                <Image source={{ uri: logoUri }} style={hubStyles.businessLogo} resizeMode="contain" />
+                                                            ) : (
+                                                                <View style={hubStyles.businessLogoFallback}>
+                                                                    <Icon name="book-open-page-variant" size={26} color="#4F46E5" />
+                                                                </View>
+                                                            )}
+                                                        </View>
 
-                                                <TouchableOpacity
-                                                    activeOpacity={0.88}
-                                                    style={hubStyles.startPaperBtn}
-                                                    onPress={() => {
-                                                        setActiveContentId(paper.contentId);
-                                                        setActivePaperTitle(paper.title);
-                                                        setActiveCourseTitle(paper.courseTitle);
-                                                        setActiveThumbnail(paper.thumbnail);
-                                                        loadPaper(paper.contentId);
-                                                    }}
-                                                >
-                                                    <Text style={hubStyles.startPaperBtnText}>Start Exam</Text>
-                                                    <Icon name="arrow-right" size={14} color="#FFFFFF" style={{ marginLeft: 4 }} />
-                                                </TouchableOpacity>
+                                                        <View style={hubStyles.businessInfoCol}>
+                                                            <Text style={hubStyles.businessTitle} numberOfLines={2}>{bCategory.name}</Text>
+                                                            <Text style={hubStyles.businessSubTitle} numberOfLines={1}>{bCategory.courseTitle || 'Official LMS Subject'}</Text>
+                                                            <View style={hubStyles.businessMetaRow}>
+                                                                <View style={hubStyles.businessExamBadge}>
+                                                                    <Icon name="file-document-edit-outline" size={13} color="#4F46E5" style={{ marginRight: 4 }} />
+                                                                    <Text style={hubStyles.businessExamBadgeText}>
+                                                                        {bCategory.papers.length} {bCategory.papers.length === 1 ? 'Exam' : 'Exams'} Available
+                                                                    </Text>
+                                                                </View>
+                                                            </View>
+                                                        </View>
+
+                                                        <View style={hubStyles.businessActionCol}>
+                                                            <View style={hubStyles.businessArrowBtn}>
+                                                                <Icon name="chevron-right" size={20} color="#4F46E5" />
+                                                            </View>
+                                                        </View>
+                                                    </TouchableOpacity>
+                                                );
+                                            })
+                                        )}
+                                    </>
+                                ) : (
+                                    <>
+                                        {/* Back Button to Categories */}
+                                        <TouchableOpacity
+                                            style={hubStyles.backToCategoriesBtn}
+                                            onPress={() => setSelectedHubBusiness(null)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Icon name="arrow-left" size={16} color="#4F46E5" style={{ marginRight: 6 }} />
+                                            <Text style={hubStyles.backToCategoriesText}>Back to Categories</Text>
+                                        </TouchableOpacity>
+
+                                        {/* Selected Business Header Banner */}
+                                        <View style={hubStyles.selectedBusinessBanner}>
+                                            <View style={hubStyles.selectedBusinessLogoWrap}>
+                                                {(() => {
+                                                    const curCat = businessCategories.find(c => c.name === selectedHubBusiness);
+                                                    const hasValidLogo = curCat && isValidImage(curCat.logo);
+                                                    const logoUri = hasValidLogo
+                                                        ? (curCat.logo.startsWith('http') ? curCat.logo : `${IMAGE_URL}icons/${curCat.logo.trim()}`)
+                                                        : `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedHubBusiness || 'IMA')}&background=4F46E5&color=fff&size=200`;
+                                                    return hasValidLogo ? (
+                                                        <Image source={{ uri: logoUri }} style={hubStyles.selectedBusinessLogo} resizeMode="contain" />
+                                                    ) : (
+                                                        <Icon name="book-open-page-variant" size={24} color="#4F46E5" />
+                                                    );
+                                                })()}
+                                            </View>
+                                            <View style={{ flex: 1, marginLeft: 12 }}>
+                                                <Text style={hubStyles.selectedBusinessName}>{selectedHubBusiness}</Text>
+                                                <Text style={hubStyles.selectedBusinessPaperCount}>
+                                                    {hubPapers.filter(p => (p.businessName || 'General Studies') === selectedHubBusiness).length} Practice & Model Papers
+                                                </Text>
                                             </View>
                                         </View>
-                                    ))
+
+                                        {/* Papers for this Category */}
+                                        {hubPapers
+                                            .filter(p => (p.businessName || 'General Studies') === selectedHubBusiness)
+                                            .map(paper => (
+                                                <View key={paper.id} style={hubStyles.paperCard}>
+                                                    <View style={hubStyles.paperCardHeader}>
+                                                        <View style={[hubStyles.paperTypePill, { backgroundColor: `${getFormatBadgeColor(paper.paperType)}15`, borderColor: `${getFormatBadgeColor(paper.paperType)}40` }]}>
+                                                            <Text style={[hubStyles.paperTypePillText, { color: getFormatBadgeColor(paper.paperType) }]}>
+                                                                {paper.paperType || "MCQ"} PAPER
+                                                            </Text>
+                                                        </View>
+                                                        <Text style={hubStyles.paperDurationText}>⏱ {paper.durationMinutes || 60} mins</Text>
+                                                    </View>
+                                                    <Text style={hubStyles.paperTitle}>{paper.title}</Text>
+                                                    <Text style={hubStyles.paperSub}>{paper.courseTitle} {paper.batchName ? `• ${paper.batchName}` : ""}</Text>
+
+                                                    <View style={hubStyles.paperCardFooter}>
+                                                        <View style={hubStyles.badgeRow}>
+                                                            <Icon name="help-circle-outline" size={14} color="#64748B" />
+                                                            <Text style={hubStyles.badgeInfoText}>{paper.totalQuestions} Questions</Text>
+                                                        </View>
+
+                                                        <TouchableOpacity
+                                                            activeOpacity={0.88}
+                                                            style={hubStyles.startPaperBtn}
+                                                            onPress={() => {
+                                                                setActiveContentId(paper.contentId);
+                                                                setActivePaperTitle(paper.title);
+                                                                setActiveCourseTitle(paper.courseTitle);
+                                                                setActiveThumbnail(paper.thumbnail);
+                                                                loadPaper(paper.contentId);
+                                                            }}
+                                                        >
+                                                            <Text style={hubStyles.startPaperBtnText}>Start Exam</Text>
+                                                            <Icon name="arrow-right" size={14} color="#FFFFFF" style={{ marginLeft: 4 }} />
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                </View>
+                                            ))
+                                        }
+                                    </>
                                 )}
                             </View>
                         ) : (
@@ -752,7 +887,7 @@ const MCQPaperScreen = ({ route, navigation }) => {
 
                                             <View style={hubStyles.historyBottomRow}>
                                                 <View style={{ flexDirection: "row", alignItems: "center" }}>
-                                                    <Icon name="trophy-variant" size={14} color="#F59E0B" style={{ marginRight: 4 }} />
+                                                    <Icon name="trophy" size={14} color="#F59E0B" style={{ marginRight: 4 }} />
                                                     <Text style={hubStyles.historyRankText}>
                                                         Rank #{item.rank || 1} of {item.totalParticipants || 1}
                                                     </Text>
@@ -887,7 +1022,7 @@ const MCQPaperScreen = ({ route, navigation }) => {
                                 end={{ x: 1, y: 1 }}
                                 style={styles.thumbnailPlaceholder}
                             >
-                                <Icon name="trophy-award" size={60} color="#f59e0b" />
+                                <Icon name="trophy" size={60} color="#f59e0b" />
                             </LinearGradient>
                         )}
                         <View style={styles.thumbnailOverlayBadge}>
@@ -1328,7 +1463,7 @@ const MCQPaperScreen = ({ route, navigation }) => {
                             submission?.status === 'PENDING_EVALUATION' && { backgroundColor: '#F59E0B' }
                         ]}>
                             <Icon
-                                name={submission?.status === 'PENDING_EVALUATION' ? "file-clock" : "trophy-award"}
+                                name={submission?.status === 'PENDING_EVALUATION' ? "file-clock" : "trophy"}
                                 size={40}
                                 color="#ffffff"
                             />
@@ -1429,7 +1564,7 @@ const MCQPaperScreen = ({ route, navigation }) => {
                                 end={{ x: 1, y: 0 }}
                                 style={styles.leaderboardCtaGradient}
                             >
-                                <Icon name="trophy-variant" size={20} color="#FFFFFF" />
+                                <Icon name="trophy" size={20} color="#FFFFFF" />
                                 <Text style={styles.leaderboardCtaText}>View Exam Leaderboard & Rankings</Text>
                                 <Icon name="chevron-right" size={20} color="#FFFFFF" />
                             </LinearGradient>
@@ -2796,19 +2931,164 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         paddingVertical: 14,
-        paddingHorizontal: 16,
-        gap: 8
+        paddingHorizontal: 12
     },
     leaderboardCtaText: {
         color: "#FFFFFF",
         fontSize: 13,
         fontWeight: "800",
-        flex: 1,
-        textAlign: "center"
+        textAlign: "center",
+        marginHorizontal: 8
     }
 });
 
 const hubStyles = StyleSheet.create({
+    categorySectionHeaderRow: {
+        marginBottom: 14
+    },
+    sectionSub: {
+        color: "#64748B",
+        fontSize: 12,
+        fontWeight: "500",
+        marginTop: 2
+    },
+    businessCard: {
+        backgroundColor: "#FFFFFF",
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        flexDirection: "row",
+        alignItems: "center",
+        shadowColor: "#0F172A",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
+        elevation: 2
+    },
+    businessLogoContainer: {
+        width: 52,
+        height: 52,
+        borderRadius: 12,
+        backgroundColor: "#F8FAFC",
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden"
+    },
+    businessLogo: {
+        width: 44,
+        height: 44
+    },
+    businessLogoFallback: {
+        width: 52,
+        height: 52,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#EEF2FF"
+    },
+    businessInfoCol: {
+        flex: 1,
+        marginLeft: 14,
+        marginRight: 8
+    },
+    businessTitle: {
+        color: "#0F172A",
+        fontSize: 15,
+        fontWeight: "800",
+        lineHeight: 20
+    },
+    businessSubTitle: {
+        color: "#64748B",
+        fontSize: 11,
+        fontWeight: "500",
+        marginTop: 2
+    },
+    businessMetaRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginTop: 6
+    },
+    businessExamBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#EEF2FF",
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6
+    },
+    businessExamBadgeText: {
+        color: "#4F46E5",
+        fontSize: 11,
+        fontWeight: "700"
+    },
+    businessActionCol: {
+        alignItems: "center",
+        justifyContent: "center"
+    },
+    businessArrowBtn: {
+        width: 34,
+        height: 34,
+        borderRadius: 10,
+        backgroundColor: "#F8FAFC",
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1,
+        borderColor: "#E2E8F0"
+    },
+    backToCategoriesBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        alignSelf: "flex-start",
+        backgroundColor: "#EEF2FF",
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 10,
+        marginBottom: 14
+    },
+    backToCategoriesText: {
+        color: "#4F46E5",
+        fontSize: 12,
+        fontWeight: "700"
+    },
+    selectedBusinessBanner: {
+        backgroundColor: "#FFFFFF",
+        borderRadius: 14,
+        padding: 14,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        flexDirection: "row",
+        alignItems: "center"
+    },
+    selectedBusinessLogoWrap: {
+        width: 44,
+        height: 44,
+        borderRadius: 10,
+        backgroundColor: "#F8FAFC",
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden"
+    },
+    selectedBusinessLogo: {
+        width: 36,
+        height: 36
+    },
+    selectedBusinessName: {
+        color: "#0F172A",
+        fontSize: 15,
+        fontWeight: "900"
+    },
+    selectedBusinessPaperCount: {
+        color: "#64748B",
+        fontSize: 11,
+        fontWeight: "600",
+        marginTop: 2
+    },
     tabContainer: {
         flexDirection: "row",
         backgroundColor: "#F1F5F9",

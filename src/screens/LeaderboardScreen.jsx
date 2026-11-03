@@ -14,12 +14,19 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Ionicons } from '@expo/vector-icons';
 import LinearGradient from 'react-native-linear-gradient';
 
 import api, { IMAGE_URL } from '../services/api';
 import COLORS from '../constants/colors';
 import { AuthContext } from '../context/AuthContext';
+
+const isValidImage = (filename) => {
+  if (!filename || typeof filename !== 'string') return false;
+  const clean = filename.trim().toLowerCase();
+  if (clean === '' || clean === 'null' || clean === 'undefined' || clean === 'default.png' || clean === 'none') return false;
+  if (clean.endsWith('.enc') || clean.endsWith('.htm') || clean.endsWith('.html') || clean.endsWith('.php')) return false;
+  return true;
+};
 
 const { width } = Dimensions.get('window');
 
@@ -268,6 +275,9 @@ export default function LeaderboardScreen({ navigation }) {
             papersToFetch.push({
               subjectId: subj.id,
               subjectName: subj.name,
+              businessName: subj.businessName,
+              businessLogo: subj.businessLogo,
+              batchName: subj.batchName,
               contentItem: item,
               paperId: paperId,
               paperTitle: item.title || p?.title || 'Test',
@@ -290,6 +300,8 @@ export default function LeaderboardScreen({ navigation }) {
           papersToFetch.push({
             subjectId: ht.courseId || 0,
             subjectName: ht.courseTitle || ht.subjectName || 'General Exam',
+            businessName: ht.businessName || null,
+            businessLogo: ht.businessLogo || null,
             contentItem: { id: ht.contentId, title: ht.testTitle },
             paperId: ht.paperId,
             paperTitle: ht.testTitle,
@@ -323,6 +335,8 @@ export default function LeaderboardScreen({ navigation }) {
           groupedBySubject[sName] = {
             subjectName: sName,
             subjectId: item.subjectId,
+            businessName: item.businessName,
+            businessLogo: item.businessLogo,
             papers: []
           };
         }
@@ -410,7 +424,7 @@ export default function LeaderboardScreen({ navigation }) {
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}
         >
-          <Ionicons name="chevron-back" size={24} color="#0F172A" />
+          <Icon name="arrow-left" size={24} color="#0F172A" />
         </TouchableOpacity>
         <View style={styles.headerTitleBox}>
           <Text style={styles.headerTitle}>Leaderboard & Analytics</Text>
@@ -421,52 +435,42 @@ export default function LeaderboardScreen({ navigation }) {
           onPress={onRefresh}
           activeOpacity={0.7}
         >
-          <Ionicons name="refresh-outline" size={20} color="#64748B" />
+          <Icon name="refresh" size={22} color="#64748B" />
         </TouchableOpacity>
       </View>
 
       {/* Dual Segment Switcher (Leaderboard vs Progress) */}
       <View style={styles.topSegmentContainer}>
         <TouchableOpacity
-          style={[styles.segmentTab, activeTab === 'LEADERBOARD' && styles.segmentTabActive]}
+          style={[styles.segmentTab, activeTab === 'LEADERBOARD' && styles.segmentTabActiveLeaderboard]}
           onPress={() => setActiveTab('LEADERBOARD')}
           activeOpacity={0.8}
         >
-          <LinearGradient
-            colors={activeTab === 'LEADERBOARD' ? ['#f59e0b', '#d97706'] : ['transparent', 'transparent']}
-            style={styles.segmentGradient}
-          >
-            <Icon
-              name="trophy-variant"
-              size={18}
-              color={activeTab === 'LEADERBOARD' ? '#ffffff' : '#94a3b8'}
-              style={{ marginRight: 6 }}
-            />
-            <Text style={[styles.segmentText, activeTab === 'LEADERBOARD' && styles.segmentTextActive]}>
-              Leaderboard
-            </Text>
-          </LinearGradient>
+          <Icon
+            name="trophy"
+            size={18}
+            color={activeTab === 'LEADERBOARD' ? '#ffffff' : '#64748B'}
+            style={{ marginRight: 6 }}
+          />
+          <Text style={[styles.segmentText, activeTab === 'LEADERBOARD' && styles.segmentTextActive]}>
+            Leaderboard
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.segmentTab, activeTab === 'PROGRESS' && styles.segmentTabActive]}
+          style={[styles.segmentTab, activeTab === 'PROGRESS' && styles.segmentTabActiveProgress]}
           onPress={() => setActiveTab('PROGRESS')}
           activeOpacity={0.8}
         >
-          <LinearGradient
-            colors={activeTab === 'PROGRESS' ? ['#0284c7', '#0369a1'] : ['transparent', 'transparent']}
-            style={styles.segmentGradient}
-          >
-            <Icon
-              name="chart-line"
-              size={18}
-              color={activeTab === 'PROGRESS' ? '#ffffff' : '#94a3b8'}
-              style={{ marginRight: 6 }}
-            />
-            <Text style={[styles.segmentText, activeTab === 'PROGRESS' && styles.segmentTextActive]}>
-              Progress
-            </Text>
-          </LinearGradient>
+          <Icon
+            name="chart-line"
+            size={18}
+            color={activeTab === 'PROGRESS' ? '#ffffff' : '#64748B'}
+            style={{ marginRight: 6 }}
+          />
+          <Text style={[styles.segmentText, activeTab === 'PROGRESS' && styles.segmentTextActive]}>
+            Progress
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -501,7 +505,19 @@ export default function LeaderboardScreen({ navigation }) {
                     {/* Subject Header */}
                     <View style={styles.subjectHeader}>
                       <View style={styles.subjectIconBox}>
-                        <Icon name="book-open-variant" size={20} color="#f59e0b" />
+                        {isValidImage(subj.businessLogo) ? (
+                          <Image
+                            source={{
+                              uri: subj.businessLogo.startsWith('http')
+                                ? subj.businessLogo
+                                : `${IMAGE_URL}icons/${subj.businessLogo.trim()}`
+                            }}
+                            style={{ width: 28, height: 28, borderRadius: 6 }}
+                            resizeMode="contain"
+                          />
+                        ) : (
+                          <Icon name="book-open-variant" size={20} color="#f59e0b" />
+                        )}
                       </View>
                       <View style={{ flex: 1, marginLeft: 10 }}>
                         <Text style={styles.subjectNameText} numberOfLines={1}>{subj.subjectName}</Text>
@@ -886,7 +902,7 @@ export default function LeaderboardScreen({ navigation }) {
                             {myStanding ? (
                               <View style={styles.myStandingMetaBar}>
                                 <View style={styles.myStandingMetaItem}>
-                                  <Icon name="trophy-variant" size={13} color="#f59e0b" style={{ marginRight: 4 }} />
+                                  <Icon name="trophy" size={13} color="#f59e0b" style={{ marginRight: 4 }} />
                                   <Text style={styles.myStandingMetaLabel}>Standing: </Text>
                                   <Text style={styles.myStandingMetaHighlight}>Rank #{myStanding.rank}</Text>
                                   <Text style={styles.myStandingMetaSub}> of {totalParticipants}</Text>
@@ -894,7 +910,7 @@ export default function LeaderboardScreen({ navigation }) {
 
                                 {myStanding.scoreGap > 0 ? (
                                   <View style={styles.myStandingMetaItem}>
-                                    <Icon name="chart-line-variant" size={13} color="#38bdf8" style={{ marginRight: 4 }} />
+                                    <Icon name="chart-line" size={13} color="#38bdf8" style={{ marginRight: 4 }} />
                                     <Text style={styles.myStandingMetaLabel}>Gap to #1: </Text>
                                     <Text style={[styles.myStandingMetaHighlight, { color: '#38bdf8' }]}>
                                       {myStanding.scoreGap} pts
@@ -1223,30 +1239,41 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 4,
     borderWidth: 1,
-    borderColor: "#E2E8F0"
+    borderColor: "#E2E8F0",
+    alignItems: "center"
   },
   segmentTab: {
     flex: 1,
-    borderRadius: 10,
-    overflow: "hidden"
-  },
-  segmentTabActive: {
-    elevation: 2,
-    backgroundColor: "#FFFFFF"
-  },
-  segmentGradient: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 10
+    paddingVertical: 10,
+    borderRadius: 10
+  },
+  segmentTabActiveLeaderboard: {
+    backgroundColor: "#F59E0B",
+    shadowColor: "#F59E0B",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  segmentTabActiveProgress: {
+    backgroundColor: "#0284C7",
+    shadowColor: "#0284C7",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3
   },
   segmentText: {
     color: "#64748B",
-    fontSize: 13,
-    fontWeight: "800"
+    fontSize: 14,
+    fontWeight: "700"
   },
   segmentTextActive: {
-    color: "#FFFFFF"
+    color: "#FFFFFF",
+    fontWeight: "800"
   },
   loadingContainer: {
     flex: 1,
