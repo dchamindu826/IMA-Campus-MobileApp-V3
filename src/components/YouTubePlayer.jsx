@@ -19,7 +19,7 @@ import { WebView } from 'react-native-webview';
 let ScreenOrientation = null;
 try {
   ScreenOrientation = require('expo-screen-orientation');
-} catch (_) {}
+} catch (_) { }
 
 // Oyage domain eka. YouTube ekata yawana Referer eka meka.
 const REFERER = 'https://imacampus.online/';
@@ -508,7 +508,7 @@ export default function YouTubePlayer({
           await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
           setTimeout(() => {
             if (ScreenOrientation && ScreenOrientation.unlockAsync) {
-              ScreenOrientation.unlockAsync().catch(() => {});
+              ScreenOrientation.unlockAsync().catch(() => { });
             }
           }, 350);
         }
@@ -530,12 +530,12 @@ export default function YouTubePlayer({
   // Screen eken eliyata yanakota ayeth portrait + status bar visible karanawa
   useEffect(() => {
     if (ScreenOrientation && ScreenOrientation.unlockAsync) {
-      ScreenOrientation.unlockAsync().catch(() => {});
+      ScreenOrientation.unlockAsync().catch(() => { });
     }
     return () => {
       StatusBar.setHidden(false, 'fade');
       if (ScreenOrientation && ScreenOrientation.lockAsync) {
-        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => { });
       }
     };
   }, []);
@@ -657,9 +657,17 @@ export default function YouTubePlayer({
 
       {(errorMsg || (stuck && !ready)) && (
         <View style={styles.overlay}>
-          <Text style={styles.overlayTitle}>{errorMsg ? 'Video eka play karanna ba' : 'Video eka load wenne naha'}</Text>
+          <Text style={styles.overlayTitle}>{errorMsg ? 'Video play error....' : 'Video is not available right now'}</Text>
           <Text style={styles.overlayText}>{errorMsg || 'Internet eka check karala ayeth try karanna.'}</Text>
-          <TouchableOpacity onPress={retry} style={styles.retryBtn}>
+          <View style={styles.vpnNoticeBox}>
+            <Text style={styles.vpnNoticeText}>
+              ⚠️ Turn off your VPN if you are using any kind of VPN
+            </Text>
+            <Text style={styles.vpnNoticeSub}>
+              (VPN එකක් On කර ඇත්නම් කරුණාකර එය Off කර Retry කරන්න)
+            </Text>
+          </View>
+          <TouchableOpacity onPress={retry} style={styles.retryBtn} activeOpacity={0.8}>
             <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -697,6 +705,31 @@ const styles = StyleSheet.create({
   },
   overlayTitle: { color: '#fff', fontWeight: '800', fontSize: 15 },
   overlayText: { color: '#d1d5db', textAlign: 'center', lineHeight: 20, fontSize: 13 },
+  vpnNoticeBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginTop: 4,
+    marginBottom: 4,
+    alignItems: 'center',
+    maxWidth: '92%',
+  },
+  vpnNoticeText: {
+    color: '#fca5a5',
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  vpnNoticeSub: {
+    color: '#f87171',
+    fontSize: 10,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 2,
+  },
   retryBtn: { backgroundColor: '#DC2626', paddingHorizontal: 22, paddingVertical: 10, borderRadius: 10, marginTop: 4 },
   retryText: { color: '#fff', fontWeight: '800' },
   debug: { position: 'absolute', left: 4, top: 4, right: 4, backgroundColor: 'rgba(0,0,0,.6)', padding: 4, borderRadius: 4 },
