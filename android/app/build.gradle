@@ -201,4 +201,5 @@ if (rnVersion < versionToNumber(0, 75, 0)) {
 }
 
 apply plugin: 'com.google.gms.google-services'
+apply from: file("../../node_modules/react-native-vector-icons/fonts.gradle")
 
