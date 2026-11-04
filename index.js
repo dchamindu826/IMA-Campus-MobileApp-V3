@@ -1,7 +1,7 @@
 import 'react-native-url-polyfill/auto';
 import { AppRegistry, Platform } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
-import notifee, { AndroidImportance, AndroidCategory } from '@notifee/react-native';
+import notifee, { AndroidImportance, AndroidCategory, EventType } from '@notifee/react-native';
 import VoipPushNotification from 'react-native-voip-push-notification';
 import RNCallKeep from 'react-native-callkeep';
 import App from './App';
@@ -54,22 +54,48 @@ if (Platform.OS === 'android') {
         const callerName = remoteMessage.data.leadName || remoteMessage.data.from || 'Student';
         const callerPhone = remoteMessage.data.from || '';
         const biz = remoteMessage.data.businessType || 'IMA Campus';
+        const rawCallId = remoteMessage.data.callId || 'call_' + Date.now();
 
+        // 1. Native Telecom incoming call UI via CallKeep (Self-managed)
+        try {
+          if (RNCallKeep && typeof RNCallKeep.displayIncomingCall === 'function') {
+            RNCallKeep.displayIncomingCall(
+              rawCallId,
+              callerPhone,
+              callerName,
+              'generic',
+              false
+            );
+          }
+        } catch (callKeepErr) {
+          console.log('[Background FCM] RNCallKeep displayIncomingCall error:', callKeepErr);
+        }
+
+        // 2. WhatsApp-style Heads-up banner with continuous ringtone & action buttons
         try {
           await notifee.createChannel({
             id: 'calls_channel',
             name: 'Incoming WhatsApp Calls',
             importance: AndroidImportance.HIGH,
             sound: 'default',
-            vibration: true
+            vibration: true,
+            vibrationPattern: [300, 500, 300, 500]
           });
 
           await notifee.displayNotification({
+            id: 'incoming_call_' + rawCallId,
             title: `📞 WhatsApp Call: ${callerName}`,
             body: `Incoming call from ${callerPhone} (${biz}). Tap to answer!`,
+            data: {
+              callId: rawCallId,
+              from: callerPhone,
+              leadName: callerName,
+              businessType: biz
+            },
             android: {
               channelId: 'calls_channel',
               sound: 'default',
+              loopSound: true,
               importance: AndroidImportance.HIGH,
               category: AndroidCategory.CALL,
               color: '#25D366',
@@ -103,6 +129,28 @@ if (Platform.OS === 'android') {
           });
         } catch (err) {
           console.log('[Background FCM] Error displaying call notification:', err);
+        }
+      }
+    });
+
+    // Handle background notification action taps (Answer / Decline)
+    notifee.onBackgroundEvent(async ({ type, detail }) => {
+      const { notification, pressAction } = detail;
+      if (type === EventType.ACTION_PRESS) {
+        if (pressAction?.id === 'decline_call') {
+          try {
+            if (RNCallKeep && typeof RNCallKeep.endCall === 'function') {
+              const callId = notification?.data?.callId;
+              if (callId) RNCallKeep.endCall(callId);
+            }
+          } catch (e) {}
+          if (notification?.id) {
+            await notifee.cancelNotification(notification.id);
+          }
+        } else if (pressAction?.id === 'answer_call') {
+          if (notification?.id) {
+            await notifee.cancelNotification(notification.id);
+          }
         }
       }
     });
