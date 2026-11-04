@@ -5,6 +5,7 @@ import api from '../services/api';
 import { RTCPeerConnection, RTCSessionDescription, mediaDevices } from 'react-native-webrtc';
 import Video from 'react-native-video';
 import messaging from '@react-native-firebase/messaging';
+import notifee, { AndroidImportance, AndroidCategory, EventType } from '@notifee/react-native';
 import VoipPushNotification from 'react-native-voip-push-notification';
 import RNCallKeep from 'react-native-callkeep';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -92,9 +93,100 @@ export const CallProvider = ({ children }) => {
     const pcRef = useRef(null);
     const localStreamRef = useRef(null);
     const outboundRingingTimeoutRef = useRef(null);
+    const incomingRingingTimeoutRef = useRef(null);
     const activeCallRef = useRef(null);
     const incomingCallRef = useRef(null);
     const callIdMapRef = useRef(new Map());
+
+    const ensureCallNotificationChannel = async () => {
+        if (Platform.OS !== 'android') return;
+        try {
+            await notifee.createChannel({
+                id: 'calls_channel_v2',
+                name: 'Incoming WhatsApp Calls',
+                importance: AndroidImportance.HIGH,
+                sound: 'default',
+                vibration: true,
+                vibrationPattern: [300, 500, 300, 500],
+                bypassDnd: true,
+            });
+        } catch (e) {
+            console.log('Mobile: Error creating call notification channel:', e?.message);
+        }
+    };
+
+    const showIncomingCallNotification = async (data) => {
+        if (Platform.OS !== 'android') return;
+        try {
+            await ensureCallNotificationChannel();
+            const rawCallId = data?.callId || 'call_' + Date.now();
+            const callerName = data?.leadName || data?.from || 'Student';
+            const callerPhone = data?.from || '';
+            const biz = data?.businessType || 'IMA Campus';
+
+            await notifee.displayNotification({
+                id: 'incoming_call_' + rawCallId,
+                title: `📞 WhatsApp Call: ${callerName}`,
+                body: `Incoming call from ${callerPhone} (${biz})`,
+                data: {
+                    callId: rawCallId,
+                    from: callerPhone,
+                    leadName: callerName,
+                    businessType: biz,
+                    sdp: data?.sdp || data?.offerSdp || ''
+                },
+                android: {
+                    channelId: 'calls_channel_v2',
+                    sound: 'default',
+                    loopSound: true,
+                    importance: AndroidImportance.HIGH,
+                    category: AndroidCategory.CALL,
+                    color: '#25D366',
+                    smallIcon: 'ic_launcher',
+                    ongoing: true,
+                    autoCancel: false,
+                    fullScreenAction: {
+                        id: 'default',
+                        launchActivity: 'default'
+                    },
+                    pressAction: {
+                        id: 'default',
+                        launchActivity: 'default'
+                    },
+                    actions: [
+                        {
+                            title: 'Decline',
+                            pressAction: {
+                                id: 'decline_call'
+                            }
+                        },
+                        {
+                            title: 'Answer',
+                            pressAction: {
+                                id: 'answer_call',
+                                launchActivity: 'default'
+                            }
+                        }
+                    ]
+                }
+            });
+            console.log('Mobile: Incoming call Notifee notification posted with looping ringtone.');
+        } catch (err) {
+            console.log('Mobile: Error displaying Notifee call notification:', err);
+        }
+    };
+
+    const dismissCallNotification = async (rawCallId) => {
+        if (Platform.OS !== 'android') return;
+        try {
+            if (rawCallId) {
+                await notifee.cancelNotification('incoming_call_' + rawCallId).catch(() => {});
+            }
+            await notifee.cancelDisplayedNotifications().catch(() => {});
+        } catch (e) {
+            console.log('Mobile: Error canceling Notifee call notification:', e?.message);
+        }
+    };
 
     const registerCallKitMapping = (rawId) => {
         if (!rawId) return null;
@@ -424,6 +516,12 @@ export const CallProvider = ({ children }) => {
                 setIncomingCall(data);
                 setIsRinging(true);
 
+                if (incomingRingingTimeoutRef.current) clearTimeout(incomingRingingTimeoutRef.current);
+                incomingRingingTimeoutRef.current = setTimeout(() => {
+                    console.log("Mobile: Inbound call ringing timed out after 45s");
+                    stopRinging();
+                }, 45000);
+
                 // Show Native iOS CallKit / Android Calling Screen
                 const rawCallId = data?.callId || 'call_' + Date.now();
                 const callKitUuid = registerCallKitMapping(rawCallId);
@@ -433,6 +531,16 @@ export const CallProvider = ({ children }) => {
                     RNCallKeep.displayIncomingCall(callKitUuid, callerPhone, callerName, 'generic', false);
                 } catch (e) {
                     console.log('Mobile: RNCallKeep displayIncomingCall error:', e);
+                }
+
+                // Show Android notification bar heads-up alert with continuous ringtone & Answer/Decline buttons
+                if (Platform.OS === 'android') {
+                    showIncomingCallNotification({
+                        ...data,
+                        callId: rawCallId,
+                        leadName: callerName,
+                        from: callerPhone
+                    });
                 }
             }
         };
@@ -581,7 +689,13 @@ export const CallProvider = ({ children }) => {
     }, [socket, activeCall, incomingCall, userInfo, agentStatus]);
 
     const stopRinging = () => {
+        if (incomingRingingTimeoutRef.current) {
+            clearTimeout(incomingRingingTimeoutRef.current);
+            incomingRingingTimeoutRef.current = null;
+        }
         setIsRinging(false);
+        const currId = incomingCallRef.current?.callId || incomingCall?.callId;
+        dismissCallNotification(currId);
         setIncomingCall(null);
     };
 
@@ -624,8 +738,13 @@ export const CallProvider = ({ children }) => {
             return;
         }
 
-        // Stop ringtone audio immediately
+        // Stop ringtone audio & notification immediately
+        if (incomingRingingTimeoutRef.current) {
+            clearTimeout(incomingRingingTimeoutRef.current);
+            incomingRingingTimeoutRef.current = null;
+        }
         setIsRinging(false);
+        dismissCallNotification(targetCallId);
 
         // Tell CallKit immediately so top banner stops ringing and answers
         try {
@@ -1144,6 +1263,56 @@ export const CallProvider = ({ children }) => {
         setIsCallMinimized(prev => typeof val === 'boolean' ? val : !prev);
     };
 
+    // Listen to Notifee notification bar button taps (Answer / Decline)
+    useEffect(() => {
+        if (Platform.OS !== 'android') return;
+
+        const unsubscribe = notifee.onForegroundEvent(async ({ type, detail }) => {
+            const { notification, pressAction } = detail;
+            if (type === EventType.ACTION_PRESS) {
+                const notifCallId = notification?.data?.callId;
+                const notifSdp = notification?.data?.sdp;
+
+                if (pressAction?.id === 'decline_call') {
+                    console.log('Mobile: Notification bar Decline action tapped');
+                    if (notification?.id) {
+                        await notifee.cancelNotification(notification.id).catch(() => {});
+                    }
+                    await rejectCall(notifCallId);
+                } else if (pressAction?.id === 'answer_call') {
+                    console.log('Mobile: Notification bar Answer action tapped');
+                    if (notification?.id) {
+                        await notifee.cancelNotification(notification.id).catch(() => {});
+                    }
+                    await answerCall(notifCallId, notifSdp);
+                }
+            }
+        });
+
+        // Also check if app was opened with a pending answer action from background
+        const checkPendingAnswer = async () => {
+            try {
+                const pending = await AsyncStorage.getItem('@pending_answer_call');
+                if (pending) {
+                    await AsyncStorage.removeItem('@pending_answer_call');
+                    const parsed = JSON.parse(pending);
+                    if (parsed?.callId) {
+                        console.log('Mobile: Processing pending answer from background notification:', parsed.callId);
+                        setTimeout(() => {
+                            answerCall(parsed.callId, parsed.sdp);
+                        }, 600);
+                    }
+                }
+            } catch (e) {}
+        };
+        checkPendingAnswer();
+
+        return () => {
+            if (typeof unsubscribe === 'function') unsubscribe();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [socket, incomingCall, activeCall]);
+
     const baseAudioUrl = api.defaults.baseURL.replace('/api/', '').replace('/api', '');
 
     return (
@@ -1168,9 +1337,13 @@ export const CallProvider = ({ children }) => {
         }}>
             {children}
             {/* Incoming Ringtone */}
-            {isRinging && incomingCall?.ringtoneUrl && (
+            {isRinging && (
                 <Video
-                    source={{ uri: `${baseAudioUrl}${incomingCall.ringtoneUrl}` }}
+                    source={{
+                        uri: incomingCall?.ringtoneUrl
+                            ? `${baseAudioUrl}${incomingCall.ringtoneUrl}`
+                            : 'https://assets.mixkit.co/active_storage/sfx/2874/2874-preview.mp3'
+                    }}
                     audioOnly={true}
                     repeat={true}
                     playInBackground={true}

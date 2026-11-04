@@ -251,6 +251,10 @@ export default function App() {
         }
 
         try {
+          await notifee.requestPermission();
+        } catch (npErr) {}
+
+        try {
           const authStatus = await messaging().requestPermission();
           const enabled =
             authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
@@ -271,11 +275,13 @@ export default function App() {
         });
 
         await notifee.createChannel({
-          id: 'calls_channel',
+          id: 'calls_channel_v2',
           name: 'Incoming WhatsApp Calls',
           importance: AndroidImportance.HIGH,
           sound: 'default',
-          vibration: true
+          vibration: true,
+          vibrationPattern: [300, 500, 300, 500],
+          bypassDnd: true,
         });
 
         try {
@@ -297,6 +303,10 @@ export default function App() {
     try {
       unsubscribe = messaging().onMessage(async remoteMessage => {
         console.log('Foreground Message Full:', JSON.stringify(remoteMessage, null, 2));
+
+        if (remoteMessage.data?.type === 'INCOMING_CALL') {
+          return;
+        }
 
         const notifImage = remoteMessage.notification?.android?.imageUrl;
         const dataImage = remoteMessage.data?.image_url;

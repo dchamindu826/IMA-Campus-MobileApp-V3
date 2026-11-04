@@ -74,26 +74,28 @@ if (Platform.OS === 'android') {
         // 2. WhatsApp-style Heads-up banner with continuous ringtone & action buttons
         try {
           await notifee.createChannel({
-            id: 'calls_channel',
+            id: 'calls_channel_v2',
             name: 'Incoming WhatsApp Calls',
             importance: AndroidImportance.HIGH,
             sound: 'default',
             vibration: true,
-            vibrationPattern: [300, 500, 300, 500]
+            vibrationPattern: [300, 500, 300, 500],
+            bypassDnd: true
           });
 
           await notifee.displayNotification({
             id: 'incoming_call_' + rawCallId,
             title: `📞 WhatsApp Call: ${callerName}`,
-            body: `Incoming call from ${callerPhone} (${biz}). Tap to answer!`,
+            body: `Incoming call from ${callerPhone} (${biz})`,
             data: {
               callId: rawCallId,
               from: callerPhone,
               leadName: callerName,
-              businessType: biz
+              businessType: biz,
+              sdp: remoteMessage.data?.sdp || remoteMessage.data?.offerSdp || ''
             },
             android: {
-              channelId: 'calls_channel',
+              channelId: 'calls_channel_v2',
               sound: 'default',
               loopSound: true,
               importance: AndroidImportance.HIGH,
@@ -137,10 +139,12 @@ if (Platform.OS === 'android') {
     notifee.onBackgroundEvent(async ({ type, detail }) => {
       const { notification, pressAction } = detail;
       if (type === EventType.ACTION_PRESS) {
+        const callId = notification?.data?.callId;
+        const sdp = notification?.data?.sdp;
+
         if (pressAction?.id === 'decline_call') {
           try {
             if (RNCallKeep && typeof RNCallKeep.endCall === 'function') {
-              const callId = notification?.data?.callId;
               if (callId) RNCallKeep.endCall(callId);
             }
           } catch (e) {}
@@ -150,6 +154,12 @@ if (Platform.OS === 'android') {
         } else if (pressAction?.id === 'answer_call') {
           if (notification?.id) {
             await notifee.cancelNotification(notification.id);
+          }
+          if (callId) {
+            try {
+              const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+              await AsyncStorage.setItem('@pending_answer_call', JSON.stringify({ callId, sdp }));
+            } catch (e) {}
           }
         }
       }

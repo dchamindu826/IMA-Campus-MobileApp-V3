@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Dimensions, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Dimensions, Animated, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useCall } from '../context/CallContext';
 
@@ -153,14 +153,19 @@ const GlobalCallPopup = () => {
             )}
 
             {/* 2. FULL SCREEN CALL MODAL (Shown when incoming call rings or maximized) */}
-            <Modal transparent={true} visible={(isRinging || !!activeCall) && !isCallMinimized} animationType="fade">
+            <Modal
+                transparent={false}
+                visible={(isRinging || !!activeCall) && !isCallMinimized}
+                animationType="slide"
+                statusBarTranslucent={true}
+            >
                 <View style={styles.overlay}>
                     <View style={styles.popupContainer}>
 
                         {/* Top Header with Minimize shortcut for multitasking */}
                         <View style={styles.headerRow}>
                             <View style={styles.headerBadge}>
-                                <Icon name="whatsapp" size={15} color="#25D366" style={{ marginRight: 5 }} />
+                                <Icon name="whatsapp" size={16} color="#25D366" style={{ marginRight: 6 }} />
                                 <Text style={styles.headerBadgeText}>WhatsApp Audio Call</Text>
                             </View>
 
@@ -170,68 +175,71 @@ const GlobalCallPopup = () => {
                                     onPress={() => toggleMinimize(true)}
                                     activeOpacity={0.7}
                                 >
-                                    <Icon name="arrow-collapse" size={16} color="#94A3B8" style={{ marginRight: 4 }} />
+                                    <Icon name="arrow-collapse" size={16} color="#CBD5E1" style={{ marginRight: 4 }} />
                                     <Text style={styles.headerMinimizeText}>Minimize</Text>
                                 </TouchableOpacity>
                             )}
                         </View>
 
-                        {/* Pulsing Avatar Icon */}
-                        <View style={styles.iconContainer}>
-                            {(isRinging || isDialing || isRemoteRinging || isOnHold) && (
-                                <Animated.View
+                        {/* Center Section: Avatar & Caller Info */}
+                        <View style={styles.centerContent}>
+                            {/* Pulsing Avatar Icon */}
+                            <View style={styles.iconContainer}>
+                                {(isRinging || isDialing || isRemoteRinging || isOnHold) && (
+                                    <Animated.View
+                                        style={[
+                                            styles.rippleEffect,
+                                            isOnHold && styles.rippleHold,
+                                            { transform: [{ scale: pulseAnim }] }
+                                        ]}
+                                    />
+                                )}
+                                <View
                                     style={[
-                                        styles.rippleEffect,
-                                        isOnHold && styles.rippleHold,
-                                        { transform: [{ scale: pulseAnim }] }
+                                        styles.iconBackground,
+                                        isOnHold ? styles.holdIconBackground : isConnected ? styles.activeIconBackground : null
                                     ]}
-                                />
-                            )}
-                            <View
-                                style={[
-                                    styles.iconBackground,
-                                    isOnHold ? styles.holdIconBackground : isConnected ? styles.activeIconBackground : null
-                                ]}
-                            >
+                                >
+                                    <Icon
+                                        name={isOnHold ? "phone-paused" : isConnected ? "phone-in-talk" : isOutbound ? "phone-outgoing" : "phone-incoming"}
+                                        size={46}
+                                        color="white"
+                                    />
+                                </View>
+                            </View>
+
+                            {/* Status Label */}
+                            <View style={[styles.statusBadge, isOnHold && styles.statusBadgeHold]}>
                                 <Icon
-                                    name={isOnHold ? "phone-paused" : isConnected ? "phone-in-talk" : isOutbound ? "phone-outgoing" : "phone-incoming"}
-                                    size={38}
-                                    color="white"
+                                    name={isOnHold ? "pause-circle" : "whatsapp"}
+                                    size={15}
+                                    color={isOnHold ? "#F59E0B" : "#25D366"}
+                                    style={{ marginRight: 6 }}
                                 />
+                                <Text style={[styles.statusBadgeText, isOnHold && styles.statusBadgeTextHold]}>
+                                    {getStatusText()}
+                                </Text>
                             </View>
+
+                            {/* Caller / Lead Info */}
+                            <Text style={styles.nameText} numberOfLines={1}>{callData?.leadName || 'Student'}</Text>
+                            <Text style={styles.phoneText}>{callData?.from || ''}</Text>
+
+                            {callData?.businessType && (
+                                <View style={styles.businessBadge}>
+                                    <Text style={styles.businessBadgeText}>{callData.businessType}</Text>
+                                </View>
+                            )}
+
+                            {/* Duration Timer */}
+                            {isConnected ? (
+                                <Text style={[styles.timerText, isOnHold && styles.timerTextHold]}>
+                                    {formatTime(callDuration)}
+                                </Text>
+                            ) : (
+                                <View style={{ height: 25 }} />
+                            )}
                         </View>
-
-                        {/* Status Label */}
-                        <View style={[styles.statusBadge, isOnHold && styles.statusBadgeHold]}>
-                            <Icon
-                                name={isOnHold ? "pause-circle" : "whatsapp"}
-                                size={15}
-                                color={isOnHold ? "#F59E0B" : "#25D366"}
-                                style={{ marginRight: 6 }}
-                            />
-                            <Text style={[styles.statusBadgeText, isOnHold && styles.statusBadgeTextHold]}>
-                                {getStatusText()}
-                            </Text>
-                        </View>
-
-                        {/* Caller / Lead Info */}
-                        <Text style={styles.nameText} numberOfLines={1}>{callData?.leadName || 'Student'}</Text>
-                        <Text style={styles.phoneText}>{callData?.from || ''}</Text>
-
-                        {callData?.businessType && (
-                            <View style={styles.businessBadge}>
-                                <Text style={styles.businessBadgeText}>{callData.businessType}</Text>
-                            </View>
-                        )}
-
-                        {/* Duration Timer */}
-                        {isConnected ? (
-                            <Text style={[styles.timerText, isOnHold && styles.timerTextHold]}>
-                                {formatTime(callDuration)}
-                            </Text>
-                        ) : (
-                            <View style={{ height: 25 }} />
-                        )}
 
                         {/* Action Buttons */}
                         <View style={styles.actionContainer}>
@@ -429,24 +437,24 @@ const styles = StyleSheet.create({
     // Full Screen Modal Overlay
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(7, 13, 20, 0.90)',
+        backgroundColor: '#0b141a',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20
     },
     popupContainer: {
-        width: Math.min(width - 32, 390),
-        backgroundColor: '#111b21',
-        borderRadius: 28,
-        paddingVertical: 26,
-        paddingHorizontal: 22,
+        width: '100%',
+        flex: 1,
+        backgroundColor: '#0b141a',
+        paddingTop: Platform.OS === 'android' ? 50 : 65,
+        paddingBottom: Platform.OS === 'android' ? 40 : 55,
+        paddingHorizontal: 24,
         alignItems: 'center',
-        elevation: 15,
-        shadowColor: '#000',
-        shadowOpacity: 0.6,
-        shadowRadius: 20,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)'
+        justifyContent: 'space-between',
+    },
+    centerContent: {
+        alignItems: 'center',
+        width: '100%',
+        justifyContent: 'center',
     },
     headerRow: {
         flexDirection: 'row',
