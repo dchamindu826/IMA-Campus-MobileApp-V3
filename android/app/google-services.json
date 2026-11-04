@@ -7,7 +7,26 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:325135081474:android:1f89ae22d859a19d62871b",
+        "mobilesdk_app_id": "1:325135081474:android:3e28a771460e0d3562871b",
+        "android_client_info": {
+          "package_name": "com.imaacademyapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyACE1QwUxgdiKiOUnNeVlZVfCmOJSi7H90"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:325135081474:android:6fb6cd5c3d370ad662871b",
         "android_client_info": {
           "package_name": "com.imacampus.app"
         }
@@ -15,7 +34,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDkYr4nSUMtNeshsv8Jc291o9uEkrltmd4"
+          "current_key": "AIzaSyACE1QwUxgdiKiOUnNeVlZVfCmOJSi7H90"
         }
       ],
       "services": {
@@ -27,4 +46,3 @@
   ],
   "configuration_version": "1"
 }
-

@@ -33,6 +33,9 @@ local.properties
 .cxx/
 *.keystore
 !debug.keystore
+*.aab
+*.apk
+backup data from pc/
 .kotlin/
 
 # node.js
