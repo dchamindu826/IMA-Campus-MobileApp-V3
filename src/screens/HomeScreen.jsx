@@ -174,9 +174,13 @@ const HomeScreen = ({ navigation }) => {
             }
           }
 
-          businessIds.forEach(id => messaging().subscribeToTopic(`business_${id}`).catch(() => {}));
-          batchIds.forEach(id => messaging().subscribeToTopic(`batch_${id}`).catch(() => {}));
-          courseIds.forEach(id => messaging().subscribeToTopic(`course_${id}`).catch(() => {}));
+          try {
+            businessIds.forEach(id => { try { messaging().subscribeToTopic(`business_${id}`).catch(() => {}); } catch(e){} });
+            batchIds.forEach(id => { try { messaging().subscribeToTopic(`batch_${id}`).catch(() => {}); } catch(e){} });
+            courseIds.forEach(id => { try { messaging().subscribeToTopic(`course_${id}`).catch(() => {}); } catch(e){} });
+          } catch (e) {
+            console.log('Firebase topic subscription skipped:', e?.message);
+          }
 
           console.log('✅ Successfully Subscribed to FCM Topics -> Businesses:', businessIds, '| Batches:', batchIds, '| Courses:', courseIds);
         }

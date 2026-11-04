@@ -58,7 +58,7 @@ const LoginScreen = ({ navigation }) => {
         source={require('../assets/blur_bg_red.jpg')} 
         style={styles.backgroundImage}
         resizeMode="cover"
-        blurRadius={Platform.OS === 'ios' ? 10 : 5} 
+        blurRadius={Platform.OS === 'ios' ? 10 : 0} 
       >
         <View style={styles.overlay} />
 

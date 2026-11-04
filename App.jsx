@@ -1,5 +1,5 @@
 import React, { useEffect, useContext, useState } from 'react';
-import { StatusBar, ActivityIndicator, View, PermissionsAndroid, Platform, DeviceEventEmitter, Modal, Text, TouchableOpacity } from 'react-native';
+import { StatusBar, ActivityIndicator, View, PermissionsAndroid, Platform, DeviceEventEmitter, Modal, Text, TouchableOpacity, NativeModules } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -224,18 +224,21 @@ const AppNavigation = () => {
 export default function App() {
   useEffect(() => {
     // 🔥 IN-APP UPDATES CHECK (Android Only) 🔥
-    if (Platform.OS === 'android') {
+    if (Platform.OS === 'android' && NativeModules?.RNDeviceInfo) {
       try {
-        const SpInAppUpdates = require('sp-react-native-in-app-updates').default;
-        const { IAUUpdateKind } = require('sp-react-native-in-app-updates');
-        const inAppUpdates = new SpInAppUpdates(false);
-        inAppUpdates.checkNeedsUpdate().then((result) => {
-          if (result && result.shouldUpdate) {
-            inAppUpdates.startUpdate({
-              updateType: IAUUpdateKind.IMMEDIATE,
-            });
-          }
-        }).catch(err => console.log("In-App Update Check Failed:", err));
+        const inAppUpdatesModule = require('sp-react-native-in-app-updates');
+        const SpInAppUpdates = inAppUpdatesModule?.default || inAppUpdatesModule;
+        const { IAUUpdateKind } = inAppUpdatesModule || {};
+        if (SpInAppUpdates && typeof SpInAppUpdates === 'function') {
+          const inAppUpdates = new SpInAppUpdates(false);
+          inAppUpdates.checkNeedsUpdate().then((result) => {
+            if (result && result.shouldUpdate && IAUUpdateKind) {
+              inAppUpdates.startUpdate({
+                updateType: IAUUpdateKind.IMMEDIATE,
+              });
+            }
+          }).catch(err => console.log("In-App Update Check Failed:", err));
+        }
       } catch (err) {
         console.log("In-app updates module not loaded:", err);
       }
@@ -247,13 +250,17 @@ export default function App() {
           await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
         }
 
-        const authStatus = await messaging().requestPermission();
-        const enabled =
-          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+        try {
+          const authStatus = await messaging().requestPermission();
+          const enabled =
+            authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+            authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
-        if (enabled) {
-          console.log('Authorization status:', authStatus);
+          if (enabled) {
+            console.log('Authorization status:', authStatus);
+          }
+        } catch (permErr) {
+          console.log('Firebase requestPermission warning:', permErr?.message);
         }
 
         await notifee.createChannel({
@@ -271,8 +278,12 @@ export default function App() {
           vibration: true
         });
 
-        await messaging().subscribeToTopic('ima_updates');
-        console.log('Subscribed to ima_updates topic');
+        try {
+          await messaging().subscribeToTopic('ima_updates');
+          console.log('Subscribed to ima_updates topic');
+        } catch (topicErr) {
+          console.log('Firebase subscribeToTopic warning:', topicErr?.message);
+        }
       } catch (error) {
         console.log('Notification Setup Error:', error);
       }
@@ -282,52 +293,61 @@ export default function App() {
       setupNotifications();
     }, 1000);
 
-    const unsubscribe = messaging().onMessage(async remoteMessage => {
-      console.log('Foreground Message Full:', JSON.stringify(remoteMessage, null, 2));
+    let unsubscribe = null;
+    try {
+      unsubscribe = messaging().onMessage(async remoteMessage => {
+        console.log('Foreground Message Full:', JSON.stringify(remoteMessage, null, 2));
 
-      const notifImage = remoteMessage.notification?.android?.imageUrl;
-      const dataImage = remoteMessage.data?.image_url;
-      const imageUrl = notifImage || dataImage;
-      
-      const fullBody = remoteMessage.notification?.body || 'New Notification';
-      const truncatedBody = fullBody.length > 40 
-          ? fullBody.substring(0, 40) + '... (Pull down 👇)' 
-          : fullBody;
+        const notifImage = remoteMessage.notification?.android?.imageUrl;
+        const dataImage = remoteMessage.data?.image_url;
+        const imageUrl = notifImage || dataImage;
+        
+        const fullBody = remoteMessage.notification?.body || 'New Notification';
+        const truncatedBody = fullBody.length > 40 
+            ? fullBody.substring(0, 40) + '... (Pull down 👇)' 
+            : fullBody;
 
-      let notificationConfig = {
-        title: remoteMessage.notification?.title || 'IMA Campus',
-        body: imageUrl ? truncatedBody : fullBody,
-        android: {
-          channelId: 'default',
-          smallIcon: 'ic_launcher', 
-          largeIcon: 'ic_launcher', 
-          color: COLORS.primary,
-          pressAction: {
-            id: 'default',
+        let notificationConfig = {
+          title: remoteMessage.notification?.title || 'IMA Campus',
+          body: imageUrl ? truncatedBody : fullBody,
+          android: {
+            channelId: 'default',
+            smallIcon: 'ic_launcher', 
+            largeIcon: 'ic_launcher', 
+            color: COLORS.primary,
+            pressAction: {
+              id: 'default',
+            },
           },
-        },
-      };
-
-      if (imageUrl) {
-        notificationConfig.android.largeIcon = imageUrl;
-        notificationConfig.android.style = {
-          type: AndroidStyle.BIGPICTURE,
-          picture: imageUrl,
-          summary: fullBody,
         };
-      } else {
-        notificationConfig.android.style = {
-            type: AndroidStyle.BIGTEXT,
-            text: fullBody
-        };
-      }
 
-      await notifee.displayNotification(notificationConfig);
-    });
+        if (imageUrl) {
+          notificationConfig.android.largeIcon = imageUrl;
+          notificationConfig.android.style = {
+            type: AndroidStyle.BIGPICTURE,
+            picture: imageUrl,
+            summary: fullBody,
+          };
+        } else {
+          notificationConfig.android.style = {
+              type: AndroidStyle.BIGTEXT,
+              text: fullBody
+          };
+        }
+
+        await notifee.displayNotification(notificationConfig);
+      });
+    } catch (msgErr) {
+      console.log('Firebase onMessage listener skipped/failed:', msgErr?.message);
+    }
 
     return () => {
       clearTimeout(timerId); 
-      unsubscribe();
+      if (typeof unsubscribe === 'function') {
+        try {
+          unsubscribe();
+        } catch (e) {}
+      }
     };
   }, []);
 

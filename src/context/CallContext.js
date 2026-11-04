@@ -163,14 +163,23 @@ export const CallProvider = ({ children }) => {
         };
 
         registerDeviceToken();
-        const unsubscribe = messaging().onTokenRefresh(async (newToken) => {
-            try {
-                await api.post('/mobile/staff/fcm-token', { fcmToken: newToken }).catch(() => {});
-            } catch (e) {}
-        });
+        let unsubscribe = null;
+        try {
+            unsubscribe = messaging().onTokenRefresh(async (newToken) => {
+                try {
+                    await api.post('/mobile/staff/fcm-token', { fcmToken: newToken }).catch(() => {});
+                } catch (e) {}
+            });
+        } catch (tokErr) {
+            console.log('Mobile: FCM onTokenRefresh registration skipped:', tokErr?.message);
+        }
 
         return () => {
-            unsubscribe();
+            if (typeof unsubscribe === 'function') {
+                try {
+                    unsubscribe();
+                } catch (e) {}
+            }
             try {
                 if (VoipPushNotification && typeof VoipPushNotification.removeEventListener === 'function') {
                     VoipPushNotification.removeEventListener('register');
@@ -200,7 +209,8 @@ export const CallProvider = ({ children }) => {
                         cancelButton: 'Cancel',
                         okButton: 'OK',
                         imageName: 'ic_launcher',
-                        additionalPermissions: []
+                        additionalPermissions: [],
+                        selfManaged: true
                     }
                 });
                 RNCallKeep.setAvailable(true);
