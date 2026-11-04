@@ -114,8 +114,8 @@ android {
         applicationId "com.imaacademyapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 30
-        versionName "3.0.9"
+        versionCode 31
+        versionName "3.0.10"
     }
     signingConfigs {
         debug {

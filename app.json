@@ -48,8 +48,8 @@
       "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
-      "package": "com.imacampus.app",
-      "versionCode": 2,
+      "package": "com.imaacademyapp",
+      "versionCode": 31,
       "adaptiveIcon": {
         "foregroundImage": "./src/assets/logo.png",
         "backgroundColor": "#ffffff"
