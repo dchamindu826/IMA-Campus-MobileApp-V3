@@ -111,7 +111,7 @@ android {
 
     namespace "com.imacampus.app"
     defaultConfig {
-        applicationId "com.imacampus.app"
+        applicationId "com.imaacademyapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 28
