@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { DeviceEventEmitter, Platform, NativeModules } from 'react-native';
+import { DeviceEventEmitter, Platform, NativeModules, AppState } from 'react-native';
 import { io } from 'socket.io-client';
 import api from '../services/api';
 import { RTCPeerConnection, RTCSessionDescription, mediaDevices } from 'react-native-webrtc';
@@ -97,17 +97,18 @@ export const CallProvider = ({ children }) => {
     const activeCallRef = useRef(null);
     const incomingCallRef = useRef(null);
     const callIdMapRef = useRef(new Map());
+    const handleIncomingCallRef = useRef(null);
 
     const ensureCallNotificationChannel = async () => {
         if (Platform.OS !== 'android') return;
         try {
             await notifee.createChannel({
-                id: 'calls_channel_v2',
+                id: 'calls_channel_v3',
                 name: 'Incoming WhatsApp Calls',
                 importance: AndroidImportance.HIGH,
-                sound: 'default',
+                sound: 'ringtone',
                 vibration: true,
-                vibrationPattern: [300, 500, 300, 500],
+                vibrationPattern: [300, 1000, 300, 1000, 300, 1000],
                 bypassDnd: true,
             });
         } catch (e) {
@@ -136,8 +137,8 @@ export const CallProvider = ({ children }) => {
                     sdp: data?.sdp || data?.offerSdp || ''
                 },
                 android: {
-                    channelId: 'calls_channel_v2',
-                    sound: 'default',
+                    channelId: 'calls_channel_v3',
+                    sound: 'ringtone',
                     loopSound: true,
                     importance: AndroidImportance.HIGH,
                     category: AndroidCategory.CALL,
@@ -256,6 +257,7 @@ export const CallProvider = ({ children }) => {
 
         registerDeviceToken();
         let unsubscribe = null;
+        let unsubscribeMessage = null;
         try {
             unsubscribe = messaging().onTokenRefresh(async (newToken) => {
                 try {
@@ -266,10 +268,37 @@ export const CallProvider = ({ children }) => {
             console.log('Mobile: FCM onTokenRefresh registration skipped:', tokErr?.message);
         }
 
+        try {
+            unsubscribeMessage = messaging().onMessage(async (remoteMessage) => {
+                console.log('Mobile: FCM message received while app active/recents:', remoteMessage);
+                if (remoteMessage.data?.type === 'INCOMING_CALL') {
+                    if (handleIncomingCallRef.current) {
+                        const callData = {
+                            callId: remoteMessage.data.callId,
+                            from: remoteMessage.data.from,
+                            leadName: remoteMessage.data.leadName || remoteMessage.data.from || 'Student',
+                            businessType: remoteMessage.data.businessType || 'IMA Campus',
+                            businessId: remoteMessage.data.businessId,
+                            receivingWaNumId: remoteMessage.data.receivingWaNumId,
+                            sdp: remoteMessage.data.sdp || remoteMessage.data.offerSdp || ''
+                        };
+                        handleIncomingCallRef.current(callData);
+                    }
+                }
+            });
+        } catch (msgErr) {
+            console.log('Mobile: FCM onMessage registration skipped:', msgErr?.message);
+        }
+
         return () => {
             if (typeof unsubscribe === 'function') {
                 try {
                     unsubscribe();
+                } catch (e) {}
+            }
+            if (typeof unsubscribeMessage === 'function') {
+                try {
+                    unsubscribeMessage();
                 } catch (e) {}
             }
             try {
@@ -472,9 +501,21 @@ export const CallProvider = ({ children }) => {
             syncPoolJoin();
         });
 
+        const appStateSub = AppState.addEventListener('change', (nextState) => {
+            if (nextState === 'active') {
+                if (!newSocket.connected) {
+                    console.log('Mobile: App resumed to active, reconnecting socket...');
+                    newSocket.connect();
+                } else {
+                    syncPoolJoin();
+                }
+            }
+        });
+
         setSocket(newSocket);
 
         return () => {
+            appStateSub.remove();
             if (newSocket) newSocket.disconnect();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -522,15 +563,18 @@ export const CallProvider = ({ children }) => {
                     stopRinging();
                 }, 45000);
 
-                // Show Native iOS CallKit / Android Calling Screen
                 const rawCallId = data?.callId || 'call_' + Date.now();
-                const callKitUuid = registerCallKitMapping(rawCallId);
                 const callerName = data?.leadName || 'Student';
                 const callerPhone = data?.from || 'WhatsApp Call';
-                try {
-                    RNCallKeep.displayIncomingCall(callKitUuid, callerPhone, callerName, 'generic', false);
-                } catch (e) {
-                    console.log('Mobile: RNCallKeep displayIncomingCall error:', e);
+
+                // Show Native iOS CallKit only (avoid Android TelecomManager crash/mute)
+                if (Platform.OS === 'ios') {
+                    const callKitUuid = registerCallKitMapping(rawCallId);
+                    try {
+                        RNCallKeep.displayIncomingCall(callKitUuid, callerPhone, callerName, 'generic', false);
+                    } catch (e) {
+                        console.log('Mobile: RNCallKeep displayIncomingCall error:', e);
+                    }
                 }
 
                 // Show Android notification bar heads-up alert with continuous ringtone & Answer/Decline buttons
@@ -544,6 +588,7 @@ export const CallProvider = ({ children }) => {
                 }
             }
         };
+        handleIncomingCallRef.current = handleIncomingCall;
 
         const handleCallAnsweredByOther = (data) => {
             if (incomingCall && incomingCall.callId === data.callId) {

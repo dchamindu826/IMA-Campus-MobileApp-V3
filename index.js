@@ -56,30 +56,15 @@ if (Platform.OS === 'android') {
         const biz = remoteMessage.data.businessType || 'IMA Campus';
         const rawCallId = remoteMessage.data.callId || 'call_' + Date.now();
 
-        // 1. Native Telecom incoming call UI via CallKeep (Self-managed)
-        try {
-          if (RNCallKeep && typeof RNCallKeep.displayIncomingCall === 'function') {
-            RNCallKeep.displayIncomingCall(
-              rawCallId,
-              callerPhone,
-              callerName,
-              'generic',
-              false
-            );
-          }
-        } catch (callKeepErr) {
-          console.log('[Background FCM] RNCallKeep displayIncomingCall error:', callKeepErr);
-        }
-
-        // 2. WhatsApp-style Heads-up banner with continuous ringtone & action buttons
+        // WhatsApp-style Heads-up banner with continuous looping ringtone & action buttons
         try {
           await notifee.createChannel({
-            id: 'calls_channel_v2',
+            id: 'calls_channel_v3',
             name: 'Incoming WhatsApp Calls',
             importance: AndroidImportance.HIGH,
-            sound: 'default',
+            sound: 'ringtone',
             vibration: true,
-            vibrationPattern: [300, 500, 300, 500],
+            vibrationPattern: [300, 1000, 300, 1000, 300, 1000],
             bypassDnd: true
           });
 
@@ -95,8 +80,8 @@ if (Platform.OS === 'android') {
               sdp: remoteMessage.data?.sdp || remoteMessage.data?.offerSdp || ''
             },
             android: {
-              channelId: 'calls_channel_v2',
-              sound: 'default',
+              channelId: 'calls_channel_v3',
+              sound: 'ringtone',
               loopSound: true,
               importance: AndroidImportance.HIGH,
               category: AndroidCategory.CALL,
@@ -143,17 +128,12 @@ if (Platform.OS === 'android') {
         const sdp = notification?.data?.sdp;
 
         if (pressAction?.id === 'decline_call') {
-          try {
-            if (RNCallKeep && typeof RNCallKeep.endCall === 'function') {
-              if (callId) RNCallKeep.endCall(callId);
-            }
-          } catch (e) {}
           if (notification?.id) {
-            await notifee.cancelNotification(notification.id);
+            await notifee.cancelNotification(notification.id).catch(() => {});
           }
         } else if (pressAction?.id === 'answer_call') {
           if (notification?.id) {
-            await notifee.cancelNotification(notification.id);
+            await notifee.cancelNotification(notification.id).catch(() => {});
           }
           if (callId) {
             try {
