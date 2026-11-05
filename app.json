@@ -49,7 +49,7 @@
     },
     "android": {
       "package": "com.imaacademyapp",
-      "versionCode": 32,
+      "versionCode": 33,
       "adaptiveIcon": {
         "foregroundImage": "./src/assets/logo.png",
         "backgroundColor": "#ffffff"

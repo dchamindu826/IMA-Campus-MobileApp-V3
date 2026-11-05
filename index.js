@@ -50,9 +50,12 @@ if (Platform.OS === 'android') {
     messaging().setBackgroundMessageHandler(async remoteMessage => {
       console.log('[Background FCM] Message Received:', remoteMessage);
 
-      if (remoteMessage.data?.type === 'INCOMING_CALL') {
-        const callerName = remoteMessage.data.leadName || remoteMessage.data.from || 'Student';
-        const callerPhone = remoteMessage.data.from || '';
+      const type = String(remoteMessage.data?.type || '').toUpperCase();
+      const hasCallData = type.includes('CALL') || !!remoteMessage.data?.callId || !!remoteMessage.data?.sdp || !!remoteMessage.data?.offerSdp;
+
+      if (hasCallData) {
+        const callerName = remoteMessage.data.leadName || remoteMessage.data.callerName || remoteMessage.data.from || 'Student';
+        const callerPhone = remoteMessage.data.from || remoteMessage.data.phone || '';
         const biz = remoteMessage.data.businessType || 'IMA Campus';
         const rawCallId = remoteMessage.data.callId || 'call_' + Date.now();
 

@@ -255,6 +255,23 @@ export const CallProvider = ({ children }) => {
             }
         };
 
+        const requestNotificationPermission = async () => {
+            try {
+                if (Platform.OS === 'android') {
+                    await notifee.requestPermission().catch(() => {});
+                    if (Platform.Version >= 33) {
+                        const { PermissionsAndroid } = require('react-native');
+                        await PermissionsAndroid.request(
+                            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+                        ).catch(() => {});
+                    }
+                }
+            } catch (e) {
+                console.log('Mobile: Error requesting notification permission:', e?.message);
+            }
+        };
+        requestNotificationPermission();
+
         registerDeviceToken();
         let unsubscribe = null;
         let unsubscribeMessage = null;
@@ -271,12 +288,14 @@ export const CallProvider = ({ children }) => {
         try {
             unsubscribeMessage = messaging().onMessage(async (remoteMessage) => {
                 console.log('Mobile: FCM message received while app active/recents:', remoteMessage);
-                if (remoteMessage.data?.type === 'INCOMING_CALL') {
+                const type = String(remoteMessage.data?.type || '').toUpperCase();
+                const hasCallData = type.includes('CALL') || !!remoteMessage.data?.callId || !!remoteMessage.data?.sdp || !!remoteMessage.data?.offerSdp;
+                if (hasCallData) {
                     if (handleIncomingCallRef.current) {
                         const callData = {
-                            callId: remoteMessage.data.callId,
-                            from: remoteMessage.data.from,
-                            leadName: remoteMessage.data.leadName || remoteMessage.data.from || 'Student',
+                            callId: remoteMessage.data.callId || 'call_' + Date.now(),
+                            from: remoteMessage.data.from || remoteMessage.data.phone || '',
+                            leadName: remoteMessage.data.leadName || remoteMessage.data.callerName || remoteMessage.data.from || 'Student',
                             businessType: remoteMessage.data.businessType || 'IMA Campus',
                             businessId: remoteMessage.data.businessId,
                             receivingWaNumId: remoteMessage.data.receivingWaNumId,
